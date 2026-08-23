@@ -39,3 +39,10 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+server/node_modules/
+server/uploads/
+.mp4
+.mov
+.avi
+.mkv
+.env.local
