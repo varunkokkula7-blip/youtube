@@ -36,37 +36,48 @@ export default function VideoGrid() {
         setLoading(true);
         setError("");
 
+        // ==========================================
+        // PRODUCTION BACKEND URL
+        // ==========================================
+
+        const API_URL =
+          process.env.NEXT_PUBLIC_API_URL ||
+          "https://youtube-hiv1.onrender.com";
+
+        console.log("Backend URL:", API_URL);
+
         const response = await fetch(
-          "http://localhost:5000/video/getall"
+          `${API_URL}/video/getall`,
+          {
+            method: "GET",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            cache: "no-store",
+          }
         );
 
         if (!response.ok) {
-          throw new Error("Failed to fetch videos");
+          throw new Error(
+            `Failed to fetch videos: ${response.status}`
+          );
         }
 
         const data: VideoResponse =
           await response.json();
 
-        console.log(
-          "Videos from backend:",
-          data
-        );
+        console.log("Videos from backend:", data);
 
         if (Array.isArray(data.videos)) {
           setVideos(data.videos);
         } else {
           setVideos([]);
+          throw new Error("Backend did not return videos array");
         }
-      } catch (error) {
-        console.error(
-          "Error loading videos:",
-          error
-        );
+      } catch (err) {
+        console.error("Error loading videos:", err);
 
-        setError(
-          "Unable to load videos."
-        );
-
+        setError("Unable to load videos.");
         setVideos([]);
       } finally {
         setLoading(false);
@@ -126,55 +137,42 @@ export default function VideoGrid() {
     <div className="grid grid-cols-1 gap-6 p-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
       {videos.map((video) => {
         // ======================================
+        // BACKEND URL
+        // ======================================
+
+        const API_URL =
+          process.env.NEXT_PUBLIC_API_URL ||
+          "https://youtube-hiv1.onrender.com";
+
+        // ======================================
         // CLEAN FILE PATH
         // ======================================
 
-        let cleanPath =
-          video.filepath || "";
+        let cleanPath = video.filepath || "";
 
-        // Windows \ -> /
-        cleanPath = cleanPath.replace(
-          /\\/g,
-          "/"
-        );
+        // Convert Windows backslashes to /
+        cleanPath = cleanPath.replace(/\\/g, "/");
 
-        // Remove "uploads/" if it already exists
-        cleanPath = cleanPath.replace(
-          /^uploads\//,
-          ""
-        );
+        // Remove uploads/ if already included
+        cleanPath = cleanPath.replace(/^uploads\//, "");
 
-        // Remove leading slash
-        cleanPath = cleanPath.replace(
-          /^\/+/,
-          ""
-        );
+        // Remove leading /
+        cleanPath = cleanPath.replace(/^\/+/, "");
 
         // ======================================
         // VIDEO URL
         // ======================================
 
         const videoUrl = cleanPath
-          ? `http://localhost:5000/uploads/${cleanPath
+          ? `${API_URL}/uploads/${cleanPath
               .split("/")
               .map(encodeURIComponent)
               .join("/")}`
           : "";
 
-        console.log(
-          "Video:",
-          video.videotitle
-        );
-
-        console.log(
-          "File path:",
-          video.filepath
-        );
-
-        console.log(
-          "Video URL:",
-          videoUrl
-        );
+        console.log("Video:", video.videotitle);
+        console.log("File path:", video.filepath);
+        console.log("Video URL:", videoUrl);
 
         return (
           <Link
@@ -200,13 +198,12 @@ export default function VideoGrid() {
                     <source
                       src={videoUrl}
                       type={
-                        video.filetype ||
-                        "video/mp4"
+                        video.filetype || "video/mp4"
                       }
                     />
 
-                    Your browser does not
-                    support the video tag.
+                    Your browser does not support
+                    the video tag.
                   </video>
                 ) : (
                   <div className="flex h-48 items-center justify-center text-white">
@@ -220,7 +217,6 @@ export default function VideoGrid() {
               ================================== */}
 
               <div className="p-3">
-
                 <h3 className="line-clamp-2 text-lg font-semibold text-black">
                   {video.videotitle ||
                     "Untitled video"}
@@ -236,7 +232,6 @@ export default function VideoGrid() {
                   {(video.views || 0).toLocaleString()}{" "}
                   views
                 </p>
-
               </div>
             </div>
           </Link>
