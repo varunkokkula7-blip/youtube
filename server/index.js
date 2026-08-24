@@ -36,15 +36,40 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // ==========================================
-// MIDDLEWARE
+// CORS
 // ==========================================
+
+const allowedOrigins = [
+  "http://localhost:3000",
+  "https://youtube-bice-rho.vercel.app",
+];
 
 app.use(
   cors({
-    origin: "http://localhost:3000",
+    origin: function (origin, callback) {
+      // Allow requests without an origin
+      // such as Postman or direct server requests
+      if (!origin) {
+        return callback(null, true);
+      }
+
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      console.log("Blocked CORS origin:", origin);
+
+      return callback(
+        new Error("Not allowed by CORS")
+      );
+    },
     credentials: true,
   })
 );
+
+// ==========================================
+// MIDDLEWARE
+// ==========================================
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -160,14 +185,9 @@ mongoose
     console.log("MongoDB connected successfully");
 
     app.listen(PORT, () => {
-      console.log(
-        `Server running at http://localhost:${PORT}`
-      );
+      console.log(`Server running on port ${PORT}`);
     });
   })
   .catch((error) => {
-    console.error(
-      "MongoDB connection error:",
-      error
-    );
+    console.error("MongoDB connection error:", error);
   });
