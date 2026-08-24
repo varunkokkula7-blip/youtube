@@ -21,7 +21,13 @@ import { useUser } from "@/lib/AuthContext";
 // BACKEND URL
 // ======================================================
 
-const BACKEND_URL = "http://localhost:5000";
+// IMPORTANT:
+// In production this will use your Render backend.
+// In local development it can use localhost.
+const BACKEND_URL =
+  process.env.NEXT_PUBLIC_API_URL ||
+  process.env.NEXT_PUBLIC_BACKEND_URL ||
+  "https://youtube-hiv1.onrender.com";
 
 // ======================================================
 // VIDEO TYPE
@@ -30,16 +36,24 @@ const BACKEND_URL = "http://localhost:5000";
 type Video = {
   _id: string;
   videotitle: string;
+
   filename?: string;
   filetype?: string;
-  filepath: string;
+  filepath?: string;
   filesize?: number;
+
   videochanel?: string;
   videochannel?: string;
+
   Like?: number;
   Dislike?: number;
+  likes?: number;
+  dislikes?: number;
+
   views?: number;
+
   uploader?: string;
+
   createdAt?: string;
   updatedAt?: string;
 };
@@ -60,6 +74,7 @@ type Comment = {
 
   videoid: string;
   comment: string;
+
   createdAt: string;
   updatedAt?: string;
 };
@@ -69,11 +84,11 @@ type Comment = {
 // ======================================================
 
 export default function WatchPage() {
-  // ======================================================
-  // NEXT.JS PAGES ROUTER
-  // ======================================================
-
   const router = useRouter();
+
+  // ======================================================
+  // VIDEO ID
+  // ======================================================
 
   const id =
     typeof router.query.id === "string"
@@ -95,17 +110,14 @@ export default function WatchPage() {
   const [recommended, setRecommended] =
     useState<Video[]>([]);
 
-  const [loading, setLoading] =
-    useState(true);
+  const [loading, setLoading] = useState(true);
 
-  const [likeCount, setLikeCount] =
-    useState(0);
+  const [likeCount, setLikeCount] = useState(0);
 
   const [dislikeCount, setDislikeCount] =
     useState(0);
 
-  const [liked, setLiked] =
-    useState(false);
+  const [liked, setLiked] = useState(false);
 
   const [disliked, setDisliked] =
     useState(false);
@@ -114,7 +126,7 @@ export default function WatchPage() {
     useState(false);
 
   // ======================================================
-  // COMMENT STATES
+  // COMMENTS
   // ======================================================
 
   const [comments, setComments] =
@@ -149,6 +161,45 @@ export default function WatchPage() {
     "";
 
   // ======================================================
+  // NORMALIZE VIDEO PATH
+  // ======================================================
+
+  const getVideoUrl = (
+    filepath?: string
+  ): string => {
+    if (!filepath) {
+      return "";
+    }
+
+    let cleanPath = filepath;
+
+    // Convert Windows backslashes to /
+    cleanPath = cleanPath.replace(/\\/g, "/");
+
+    // Remove leading slash
+    cleanPath = cleanPath.replace(/^\/+/, "");
+
+    // Remove uploads/ if backend already included it
+    cleanPath = cleanPath.replace(
+      /^uploads\//i,
+      ""
+    );
+
+    if (!cleanPath) {
+      return "";
+    }
+
+    const encodedPath = cleanPath
+      .split("/")
+      .map((part) =>
+        encodeURIComponent(part)
+      )
+      .join("/");
+
+    return `${BACKEND_URL}/uploads/${encodedPath}`;
+  };
+
+  // ======================================================
   // GET ALL VIDEOS
   // ======================================================
 
@@ -161,13 +212,32 @@ export default function WatchPage() {
       try {
         setLoading(true);
 
+        console.log(
+          "Backend URL:",
+          BACKEND_URL
+        );
+
+        console.log(
+          "Requested video ID:",
+          id
+        );
+
         const response = await fetch(
-          `${BACKEND_URL}/video/getall`
+          `${BACKEND_URL}/video/getall`,
+          {
+            method: "GET",
+            cache: "no-store",
+          }
+        );
+
+        console.log(
+          "Video API status:",
+          response.status
         );
 
         if (!response.ok) {
           throw new Error(
-            "Failed to fetch videos"
+            `Video API failed: ${response.status}`
           );
         }
 
@@ -175,23 +245,54 @@ export default function WatchPage() {
           await response.json();
 
         console.log(
-          "Videos:",
+          "Video API response:",
           data
         );
 
-        const allVideos: Video[] =
-          Array.isArray(data.videos)
-            ? data.videos
-            : Array.isArray(data)
-            ? data
-            : [];
+        // Support different backend response formats
+        let allVideos: Video[] = [];
+
+        if (
+          Array.isArray(data)
+        ) {
+          allVideos = data;
+        } else if (
+          Array.isArray(data?.videos)
+        ) {
+          allVideos = data.videos;
+        } else if (
+          Array.isArray(data?.data)
+        ) {
+          allVideos = data.data;
+        } else if (
+          Array.isArray(data?.data?.videos)
+        ) {
+          allVideos = data.data.videos;
+        }
+
+        console.log(
+          "All videos:",
+          allVideos
+        );
 
         const selectedVideo =
           allVideos.find(
             (item) =>
-              String(item._id) ===
+              String(item?._id) ===
               String(id)
           );
+
+        console.log(
+          "Selected video:",
+          selectedVideo
+        );
+
+        if (!selectedVideo) {
+          console.error(
+            "Video ID was not found:",
+            id
+          );
+        }
 
         setVideo(
           selectedVideo || null
@@ -200,7 +301,7 @@ export default function WatchPage() {
         setRecommended(
           allVideos.filter(
             (item) =>
-              String(item._id) !==
+              String(item?._id) !==
               String(id)
           )
         );
@@ -208,19 +309,23 @@ export default function WatchPage() {
         if (selectedVideo) {
           setLikeCount(
             Number(
-              selectedVideo.Like || 0
+              selectedVideo.Like ??
+                selectedVideo.likes ??
+                0
             )
           );
 
           setDislikeCount(
             Number(
-              selectedVideo.Dislike || 0
+              selectedVideo.Dislike ??
+                selectedVideo.dislikes ??
+                0
             )
           );
         }
       } catch (error) {
         console.error(
-          "Error loading video:",
+          "ERROR LOADING VIDEO:",
           error
         );
 
@@ -234,11 +339,15 @@ export default function WatchPage() {
   }, [router.isReady, id]);
 
   // ======================================================
-  // ADD VIDEO TO HISTORY
+  // ADD TO HISTORY
   // ======================================================
 
   useEffect(() => {
-    if (!router.isReady || !id || !userId) {
+    if (
+      !router.isReady ||
+      !id ||
+      !userId
+    ) {
       return;
     }
 
@@ -277,14 +386,22 @@ export default function WatchPage() {
     };
 
     addHistory();
-  }, [router.isReady, id, userId]);
+  }, [
+    router.isReady,
+    id,
+    userId,
+  ]);
 
   // ======================================================
-  // CHECK USER LIKE
+  // CHECK LIKE
   // ======================================================
 
   useEffect(() => {
-    if (!router.isReady || !userId || !id) {
+    if (
+      !router.isReady ||
+      !userId ||
+      !id
+    ) {
       return;
     }
 
@@ -296,10 +413,6 @@ export default function WatchPage() {
           );
 
         if (!response.ok) {
-          console.log(
-            "Could not check liked videos"
-          );
-
           return;
         }
 
@@ -307,16 +420,25 @@ export default function WatchPage() {
           await response.json();
 
         console.log(
-          "User liked videos:",
+          "Liked videos:",
           data
         );
 
-        const likedVideos =
-          Array.isArray(data.videos)
-            ? data.videos
-            : Array.isArray(data)
-            ? data
-            : [];
+        let likedVideos: any[] = [];
+
+        if (
+          Array.isArray(data)
+        ) {
+          likedVideos = data;
+        } else if (
+          Array.isArray(data?.videos)
+        ) {
+          likedVideos = data.videos;
+        } else if (
+          Array.isArray(data?.likes)
+        ) {
+          likedVideos = data.likes;
+        }
 
         const alreadyLiked =
           likedVideos.some(
@@ -329,8 +451,9 @@ export default function WatchPage() {
                 item?._id;
 
               return (
-                String(itemVideoId) ===
-                String(id)
+                String(
+                  itemVideoId
+                ) === String(id)
               );
             }
           );
@@ -347,14 +470,22 @@ export default function WatchPage() {
     };
 
     checkLike();
-  }, [router.isReady, id, userId]);
+  }, [
+    router.isReady,
+    id,
+    userId,
+  ]);
 
   // ======================================================
   // CHECK WATCH LATER
   // ======================================================
 
   useEffect(() => {
-    if (!router.isReady || !userId || !id) {
+    if (
+      !router.isReady ||
+      !userId ||
+      !id
+    ) {
       return;
     }
 
@@ -374,16 +505,30 @@ export default function WatchPage() {
             await response.json();
 
           console.log(
-            "Watch Later videos:",
+            "Watch Later:",
             data
           );
 
-          const savedVideos =
-            Array.isArray(data.videos)
-              ? data.videos
-              : Array.isArray(data)
-              ? data
-              : [];
+          let savedVideos: any[] =
+            [];
+
+          if (
+            Array.isArray(data)
+          ) {
+            savedVideos = data;
+          } else if (
+            Array.isArray(data?.videos)
+          ) {
+            savedVideos =
+              data.videos;
+          } else if (
+            Array.isArray(
+              data?.watchLater
+            )
+          ) {
+            savedVideos =
+              data.watchLater;
+          }
 
           const alreadySaved =
             savedVideos.some(
@@ -396,8 +541,9 @@ export default function WatchPage() {
                   item?._id;
 
                 return (
-                  String(itemVideoId) ===
-                  String(id)
+                  String(
+                    itemVideoId
+                  ) === String(id)
                 );
               }
             );
@@ -414,70 +560,93 @@ export default function WatchPage() {
       };
 
     checkWatchLater();
-  }, [router.isReady, id, userId]);
+  }, [
+    router.isReady,
+    id,
+    userId,
+  ]);
 
   // ======================================================
   // GET COMMENTS
   // ======================================================
 
   useEffect(() => {
-    if (!router.isReady || !id) {
+    if (
+      !router.isReady ||
+      !id
+    ) {
       return;
     }
 
-    const getComments = async () => {
-      try {
-        setCommentsLoading(true);
-
-        const response =
-          await fetch(
-            `${BACKEND_URL}/comment/${id}`
+    const getComments =
+      async () => {
+        try {
+          setCommentsLoading(
+            true
           );
 
-        if (!response.ok) {
-          throw new Error(
-            "Could not get comments"
+          const response =
+            await fetch(
+              `${BACKEND_URL}/comment/${id}`
+            );
+
+          if (!response.ok) {
+            throw new Error(
+              "Could not get comments"
+            );
+          }
+
+          const data =
+            await response.json();
+
+          console.log(
+            "Comments:",
+            data
+          );
+
+          if (
+            Array.isArray(
+              data?.comments
+            )
+          ) {
+            setComments(
+              data.comments
+            );
+          } else if (
+            Array.isArray(data)
+          ) {
+            setComments(data);
+          } else {
+            setComments([]);
+          }
+        } catch (error) {
+          console.error(
+            "Get comments error:",
+            error
+          );
+
+          setComments([]);
+        } finally {
+          setCommentsLoading(
+            false
           );
         }
-
-        const data =
-          await response.json();
-
-        console.log(
-          "Comments:",
-          data
-        );
-
-        setComments(
-          Array.isArray(
-            data.comments
-          )
-            ? data.comments
-            : Array.isArray(data)
-            ? data
-            : []
-        );
-      } catch (error) {
-        console.error(
-          "Get comments error:",
-          error
-        );
-
-        setComments([]);
-      } finally {
-        setCommentsLoading(false);
-      }
-    };
+      };
 
     getComments();
-  }, [router.isReady, id]);
+  }, [
+    router.isReady,
+    id,
+  ]);
 
   // ======================================================
   // LIKE / DISLIKE
   // ======================================================
 
   const sendLikeAction = async (
-    action: "like" | "dislike"
+    action:
+      | "like"
+      | "dislike"
   ) => {
     if (!userId) {
       alert(
@@ -502,7 +671,9 @@ export default function WatchPage() {
         return;
       }
 
-      setDislikeLoading(true);
+      setDislikeLoading(
+        true
+      );
     }
 
     try {
@@ -539,28 +710,40 @@ export default function WatchPage() {
         );
       }
 
+      const newLikeCount =
+        Number(
+          data?.Like ??
+            data?.likes ??
+            0
+        );
+
+      const newDislikeCount =
+        Number(
+          data?.Dislike ??
+            data?.dislikes ??
+            0
+        );
+
       setLikeCount(
         Math.max(
-          Number(data.Like || 0),
+          newLikeCount,
           0
         )
       );
 
       setDislikeCount(
         Math.max(
-          Number(
-            data.Dislike || 0
-          ),
+          newDislikeCount,
           0
         )
       );
 
       setLiked(
-        data.liked === true
+        data?.liked === true
       );
 
       setDisliked(
-        data.disliked === true
+        data?.disliked === true
       );
 
       setVideo(
@@ -572,13 +755,11 @@ export default function WatchPage() {
           return {
             ...previous,
 
-            Like: Number(
-              data.Like || 0
-            ),
+            Like:
+              newLikeCount,
 
-            Dislike: Number(
-              data.Dislike || 0
-            ),
+            Dislike:
+              newDislikeCount,
           };
         }
       );
@@ -593,15 +774,19 @@ export default function WatchPage() {
       );
     } finally {
       if (action === "like") {
-        setLikeLoading(false);
+        setLikeLoading(
+          false
+        );
       } else {
-        setDislikeLoading(false);
+        setDislikeLoading(
+          false
+        );
       }
     }
   };
 
   // ======================================================
-  // LIKE BUTTON
+  // LIKE
   // ======================================================
 
   const handleLike = async () => {
@@ -611,7 +796,7 @@ export default function WatchPage() {
   };
 
   // ======================================================
-  // DISLIKE BUTTON
+  // DISLIKE
   // ======================================================
 
   const handleDislike =
@@ -673,7 +858,7 @@ export default function WatchPage() {
         }
 
         setWatchLater(
-          data.added === true
+          data?.added === true
         );
       } catch (error) {
         console.error(
@@ -701,7 +886,9 @@ export default function WatchPage() {
         return;
       }
 
-      if (!commentText.trim()) {
+      if (
+        !commentText.trim()
+      ) {
         return;
       }
 
@@ -713,7 +900,9 @@ export default function WatchPage() {
         return;
       }
 
-      setCommentLoading(true);
+      setCommentLoading(
+        true
+      );
 
       try {
         const response =
@@ -750,7 +939,7 @@ export default function WatchPage() {
           );
         }
 
-        if (data.comment) {
+        if (data?.comment) {
           setComments(
             (previous) => [
               data.comment,
@@ -770,7 +959,9 @@ export default function WatchPage() {
           "Could not add comment."
         );
       } finally {
-        setCommentLoading(false);
+        setCommentLoading(
+          false
+        );
       }
     };
 
@@ -869,6 +1060,14 @@ export default function WatchPage() {
             Video not found.
           </p>
 
+          <p className="mt-2 text-sm text-gray-500">
+            Video ID: {id}
+          </p>
+
+          <p className="mt-1 text-xs text-gray-400">
+            Backend: {BACKEND_URL}
+          </p>
+
           <Link
             href="/"
             className="mt-4 inline-block rounded-lg bg-black px-5 py-2 text-white"
@@ -884,31 +1083,30 @@ export default function WatchPage() {
   // VIDEO URL
   // ======================================================
 
-  const cleanPath =
-    (video.filepath || "")
-      .replace(/\\/g, "/")
-      .replace(/^uploads\//, "")
-      .replace(/^\/+/, "");
+  const videoUrl =
+    getVideoUrl(
+      video.filepath
+    );
 
-  const videoUrl = cleanPath
-    ? `${BACKEND_URL}/uploads/${cleanPath
-        .split("/")
-        .map(
-          encodeURIComponent
-        )
-        .join("/")}`
-    : "";
+  console.log(
+    "Playing video:",
+    videoUrl
+  );
 
   // ======================================================
   // SHARE
   // ======================================================
 
-  const handleShare = async () => {
-    try {
-      if (
-        typeof navigator !==
-        "undefined"
-      ) {
+  const handleShare =
+    async () => {
+      try {
+        if (
+          typeof navigator ===
+          "undefined"
+        ) {
+          return;
+        }
+
         if (
           navigator.share
         ) {
@@ -916,7 +1114,8 @@ export default function WatchPage() {
             title:
               video.videotitle,
             url:
-              window.location.href,
+              window.location
+                .href,
           });
         } else if (
           navigator.clipboard
@@ -929,14 +1128,13 @@ export default function WatchPage() {
             "Video link copied!"
           );
         }
+      } catch (error) {
+        console.error(
+          "Share error:",
+          error
+        );
       }
-    } catch (error) {
-      console.error(
-        "Share error:",
-        error
-      );
-    }
-  };
+    };
 
   // ======================================================
   // PAGE
@@ -947,21 +1145,22 @@ export default function WatchPage() {
 
       <div className="mx-auto flex max-w-[1400px] gap-6 px-4 py-5">
 
-        {/* ==================================================
+        {/* =================================================
             LEFT SIDE
-        ================================================== */}
+        ================================================= */}
 
         <main className="min-w-0 flex-1">
 
-          {/* ==================================================
-              VIDEO
-          ================================================== */}
+          {/* =================================================
+              VIDEO PLAYER
+          ================================================= */}
 
           <div className="overflow-hidden rounded-xl bg-black">
 
             {videoUrl ? (
               <video
-                className="aspect-video w-full"
+                key={videoUrl}
+                className="aspect-video w-full bg-black"
                 controls
                 playsInline
                 preload="metadata"
@@ -985,17 +1184,17 @@ export default function WatchPage() {
 
           </div>
 
-          {/* ==================================================
+          {/* =================================================
               TITLE
-          ================================================== */}
+          ================================================= */}
 
           <h1 className="mt-4 text-xl font-bold text-black">
             {video.videotitle}
           </h1>
 
-          {/* ==================================================
+          {/* =================================================
               CHANNEL + BUTTONS
-          ================================================== */}
+          ================================================= */}
 
           <div className="mt-3 flex flex-wrap items-center gap-3">
 
@@ -1008,7 +1207,6 @@ export default function WatchPage() {
               </div>
 
               <div>
-
                 <p className="font-semibold">
                   {video.videochanel ||
                     video.videochannel ||
@@ -1018,7 +1216,6 @@ export default function WatchPage() {
                 <p className="text-sm text-gray-500">
                   1.2M subscribers
                 </p>
-
               </div>
 
             </div>
@@ -1148,9 +1345,9 @@ export default function WatchPage() {
 
           </div>
 
-          {/* ==================================================
+          {/* =================================================
               DESCRIPTION
-          ================================================== */}
+          ================================================= */}
 
           <div className="mt-4 rounded-xl bg-gray-100 p-4">
 
@@ -1158,7 +1355,8 @@ export default function WatchPage() {
 
               <span>
                 {(
-                  video.views || 0
+                  video.views ||
+                  0
                 ).toLocaleString()}{" "}
                 views
               </span>
@@ -1180,27 +1378,24 @@ export default function WatchPage() {
 
           </div>
 
-          {/* ==================================================
+          {/* =================================================
               COMMENTS
-          ================================================== */}
+          ================================================= */}
 
           <div className="mt-6">
-
-            {/* COMMENT COUNT */}
 
             <h2 className="mb-5 text-xl font-bold">
 
               {comments.length}{" "}
 
-              {comments.length === 1
+              {comments.length ===
+              1
                 ? "Comment"
                 : "Comments"}
 
             </h2>
 
-            {/* ==================================================
-                ADD COMMENT
-            ================================================== */}
+            {/* ADD COMMENT */}
 
             <div className="flex items-center gap-3">
 
@@ -1283,13 +1478,9 @@ export default function WatchPage() {
 
             </div>
 
-            {/* ==================================================
-                COMMENTS LIST
-            ================================================== */}
+            {/* COMMENTS LIST */}
 
             <div className="mt-6 space-y-6">
-
-              {/* LOADING */}
 
               {commentsLoading ? (
                 <p className="text-sm text-gray-500">
@@ -1305,16 +1496,18 @@ export default function WatchPage() {
               ) : (
                 comments.map(
                   (item) => {
-
                     const commentUserId =
-                      item.viewer?._id ||
+                      item.viewer
+                        ?._id ||
                       "";
 
                     const isOwner =
                       String(
                         commentUserId
                       ) ===
-                      String(userId);
+                      String(
+                        userId
+                      );
 
                     return (
                       <div
@@ -1361,33 +1554,30 @@ export default function WatchPage() {
                           <div className="flex flex-wrap items-center gap-2">
 
                             <p className="font-semibold">
-
-                              {item.viewer
+                              {item
+                                .viewer
                                 ?.name ||
                                 item
                                   .viewer
                                   ?.email ||
                                 "User"}
-
                             </p>
 
                             <span className="text-xs text-gray-400">
-
                               {item.createdAt
                                 ? new Date(
                                     item.createdAt
                                   ).toLocaleDateString()
                                 : ""}
-
                             </span>
 
                           </div>
 
                           <p className="mt-1 whitespace-pre-wrap text-sm text-gray-700">
-                            {item.comment}
+                            {
+                              item.comment
+                            }
                           </p>
-
-                          {/* DELETE */}
 
                           {isOwner && (
                             <button
@@ -1417,10 +1607,10 @@ export default function WatchPage() {
 
         </main>
 
-        {/* ==================================================
+        {/* =================================================
             RIGHT SIDE
             RECOMMENDED VIDEOS
-        ================================================== */}
+        ================================================= */}
 
         <aside className="hidden w-[360px] shrink-0 lg:block">
 
@@ -1428,32 +1618,10 @@ export default function WatchPage() {
 
             {recommended.map(
               (item) => {
-
-                const itemPath =
-                  (item.filepath ||
-                    "")
-                    .replace(
-                      /\\/g,
-                      "/"
-                    )
-                    .replace(
-                      /^uploads\//,
-                      ""
-                    )
-                    .replace(
-                      /^\/+/,
-                      ""
-                    );
-
                 const itemUrl =
-                  itemPath
-                    ? `${BACKEND_URL}/uploads/${itemPath
-                        .split("/")
-                        .map(
-                          encodeURIComponent
-                        )
-                        .join("/")}`
-                    : "";
+                  getVideoUrl(
+                    item.filepath
+                  );
 
                 return (
                   <Link
@@ -1464,7 +1632,7 @@ export default function WatchPage() {
                     className="flex gap-3"
                   >
 
-                    {/* VIDEO PREVIEW */}
+                    {/* VIDEO */}
 
                     <div className="w-[160px] shrink-0 overflow-hidden rounded-lg bg-black">
 
