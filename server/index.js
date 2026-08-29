@@ -41,7 +41,7 @@ const __dirname = path.dirname(__filename);
 
 const allowedOrigins = [
   "http://localhost:3000",
-  "https://youtube-bice-rho.vercel.app",
+  "https://youtube-bite-rho.vercel.app",
 ];
 
 app.use(
