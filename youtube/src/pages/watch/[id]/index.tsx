@@ -21,16 +21,13 @@ import { useUser } from "@/lib/AuthContext";
 // BACKEND URL
 // ======================================================
 
-// IMPORTANT:
-// In production this will use your Render backend.
-// In local development it can use localhost.
 const BACKEND_URL =
   process.env.NEXT_PUBLIC_API_URL ||
   process.env.NEXT_PUBLIC_BACKEND_URL ||
   "https://youtube-hiv1.onrender.com";
 
 // ======================================================
-// VIDEO TYPE
+// TYPES
 // ======================================================
 
 type Video = {
@@ -58,25 +55,26 @@ type Video = {
   updatedAt?: string;
 };
 
-// ======================================================
-// COMMENT TYPE
-// ======================================================
+type CommentUser = {
+  _id?: string;
+  name?: string;
+  email?: string;
+  image?: string;
+};
 
 type Comment = {
   _id: string;
-
-  viewer?: {
-    _id?: string;
-    name?: string;
-    email?: string;
-    image?: string;
-  };
-
+  viewer?: CommentUser;
   videoid: string;
   comment: string;
-
   createdAt: string;
   updatedAt?: string;
+
+  language?: string;
+  parentCommentId?: string | null;
+  isEdited?: boolean;
+  editedAt?: string | null;
+  isDeleted?: boolean;
 };
 
 // ======================================================
@@ -86,48 +84,71 @@ type Comment = {
 export default function WatchPage() {
   const router = useRouter();
 
-  // ======================================================
+  const { user } = useUser();
+
+  // ====================================================
   // VIDEO ID
-  // ======================================================
+  // ====================================================
 
   const id =
     typeof router.query.id === "string"
       ? router.query.id
       : "";
 
-  // ======================================================
-  // USER
-  // ======================================================
+  // ====================================================
+  // USER ID
+  // ====================================================
 
-  const { user } = useUser();
+  const userId =
+    user?._id ||
+    user?.id ||
+    "";
 
-  // ======================================================
-  // STATES
-  // ======================================================
+  // ====================================================
+  // VIDEO STATES
+  // ====================================================
 
-  const [video, setVideo] = useState<Video | null>(null);
+  const [video, setVideo] =
+    useState<Video | null>(null);
 
   const [recommended, setRecommended] =
     useState<Video[]>([]);
 
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] =
+    useState(true);
 
-  const [likeCount, setLikeCount] = useState(0);
+  // ====================================================
+  // LIKE STATES
+  // ====================================================
+
+  const [likeCount, setLikeCount] =
+    useState(0);
 
   const [dislikeCount, setDislikeCount] =
     useState(0);
 
-  const [liked, setLiked] = useState(false);
+  const [liked, setLiked] =
+    useState(false);
 
   const [disliked, setDisliked] =
     useState(false);
 
+  const [likeLoading, setLikeLoading] =
+    useState(false);
+
+  const [dislikeLoading, setDislikeLoading] =
+    useState(false);
+
+  // ====================================================
+  // WATCH LATER
+  // ====================================================
+
   const [watchLater, setWatchLater] =
     useState(false);
 
-  // ======================================================
+  // ====================================================
   // COMMENTS
-  // ======================================================
+  // ====================================================
 
   const [comments, setComments] =
     useState<Comment[]>([]);
@@ -141,28 +162,9 @@ export default function WatchPage() {
   const [commentsLoading, setCommentsLoading] =
     useState(false);
 
-  // ======================================================
-  // LIKE / DISLIKE LOADING
-  // ======================================================
-
-  const [likeLoading, setLikeLoading] =
-    useState(false);
-
-  const [dislikeLoading, setDislikeLoading] =
-    useState(false);
-
-  // ======================================================
-  // USER ID
-  // ======================================================
-
-  const userId =
-    user?._id ||
-    user?.id ||
-    "";
-
-  // ======================================================
-  // NORMALIZE VIDEO PATH
-  // ======================================================
+  // ====================================================
+  // VIDEO URL
+  // ====================================================
 
   const getVideoUrl = (
     filepath?: string
@@ -173,13 +175,13 @@ export default function WatchPage() {
 
     let cleanPath = filepath;
 
-    // Convert Windows backslashes to /
+    // Convert Windows path to normal URL path
     cleanPath = cleanPath.replace(/\\/g, "/");
 
-    // Remove leading slash
+    // Remove leading /
     cleanPath = cleanPath.replace(/^\/+/, "");
 
-    // Remove uploads/ if backend already included it
+    // Remove uploads/ if already present
     cleanPath = cleanPath.replace(
       /^uploads\//i,
       ""
@@ -199,9 +201,9 @@ export default function WatchPage() {
     return `${BACKEND_URL}/uploads/${encodedPath}`;
   };
 
-  // ======================================================
+  // ====================================================
   // GET ALL VIDEOS
-  // ======================================================
+  // ====================================================
 
   useEffect(() => {
     if (!router.isReady || !id) {
@@ -218,7 +220,7 @@ export default function WatchPage() {
         );
 
         console.log(
-          "Requested video ID:",
+          "Video ID:",
           id
         );
 
@@ -236,9 +238,7 @@ export default function WatchPage() {
         );
 
         if (!response.ok) {
-          throw new Error(
-            `Video API failed: ${response.status}`
-          );
+          throw new Error(`Video API failed: ${response.status}`);
         }
 
         const data =
@@ -249,12 +249,9 @@ export default function WatchPage() {
           data
         );
 
-        // Support different backend response formats
         let allVideos: Video[] = [];
 
-        if (
-          Array.isArray(data)
-        ) {
+        if (Array.isArray(data)) {
           allVideos = data;
         } else if (
           Array.isArray(data?.videos)
@@ -267,7 +264,8 @@ export default function WatchPage() {
         } else if (
           Array.isArray(data?.data?.videos)
         ) {
-          allVideos = data.data.videos;
+          allVideos =
+            data.data.videos;
         }
 
         console.log(
@@ -278,7 +276,7 @@ export default function WatchPage() {
         const selectedVideo =
           allVideos.find(
             (item) =>
-              String(item?._id) ===
+              String(item._id) ===
               String(id)
           );
 
@@ -287,13 +285,6 @@ export default function WatchPage() {
           selectedVideo
         );
 
-        if (!selectedVideo) {
-          console.error(
-            "Video ID was not found:",
-            id
-          );
-        }
-
         setVideo(
           selectedVideo || null
         );
@@ -301,7 +292,7 @@ export default function WatchPage() {
         setRecommended(
           allVideos.filter(
             (item) =>
-              String(item?._id) !==
+              String(item._id) !==
               String(id)
           )
         );
@@ -338,9 +329,9 @@ export default function WatchPage() {
     getVideos();
   }, [router.isReady, id]);
 
-  // ======================================================
-  // ADD TO HISTORY
-  // ======================================================
+  // ====================================================
+  // ADD VIDEO TO HISTORY
+  // ====================================================
 
   useEffect(() => {
     if (
@@ -353,22 +344,21 @@ export default function WatchPage() {
 
     const addHistory = async () => {
       try {
-        const response = await fetch(
-          `${BACKEND_URL}/history/add`,
-          {
-            method: "POST",
-
-            headers: {
-              "Content-Type":
-                "application/json",
-            },
-
-            body: JSON.stringify({
-              userId,
-              videoId: id,
-            }),
-          }
-        );
+        const response =
+          await fetch(
+            `${BACKEND_URL}/history/add`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type":
+                  "application/json",
+              },
+              body: JSON.stringify({
+                userId,
+                videoId: id,
+              }),
+            }
+          );
 
         const data =
           await response.json();
@@ -392,9 +382,9 @@ export default function WatchPage() {
     userId,
   ]);
 
-  // ======================================================
+  // ====================================================
   // CHECK LIKE
-  // ======================================================
+  // ====================================================
 
   useEffect(() => {
     if (
@@ -409,7 +399,7 @@ export default function WatchPage() {
       try {
         const response =
           await fetch(
-            `${BACKEND_URL}/like/user/${userId}`
+          `${BACKEND_URL}/like/user/${userId}`
           );
 
         if (!response.ok) {
@@ -420,15 +410,13 @@ export default function WatchPage() {
           await response.json();
 
         console.log(
-          "Liked videos:",
+          "Like response:",
           data
         );
 
         let likedVideos: any[] = [];
 
-        if (
-          Array.isArray(data)
-        ) {
+        if (Array.isArray(data)) {
           likedVideos = data;
         } else if (
           Array.isArray(data?.videos)
@@ -451,16 +439,13 @@ export default function WatchPage() {
                 item?._id;
 
               return (
-                String(
-                  itemVideoId
-                ) === String(id)
+                String(itemVideoId) ===
+                String(id)
               );
             }
           );
 
-        setLiked(
-          alreadyLiked
-        );
+        setLiked(alreadyLiked);
       } catch (error) {
         console.error(
           "Check like error:",
@@ -476,9 +461,9 @@ export default function WatchPage() {
     userId,
   ]);
 
-  // ======================================================
+  // ====================================================
   // CHECK WATCH LATER
-  // ======================================================
+  // ====================================================
 
   useEffect(() => {
     if (
@@ -505,16 +490,13 @@ export default function WatchPage() {
             await response.json();
 
           console.log(
-            "Watch Later:",
+            "Watch Later response:",
             data
           );
 
-          let savedVideos: any[] =
-            [];
+          let savedVideos: any[] = [];
 
-          if (
-            Array.isArray(data)
-          ) {
+          if (Array.isArray(data)) {
             savedVideos = data;
           } else if (
             Array.isArray(data?.videos)
@@ -541,9 +523,8 @@ export default function WatchPage() {
                   item?._id;
 
                 return (
-                  String(
-                    itemVideoId
-                  ) === String(id)
+                  String(itemVideoId) ===
+                  String(id)
                 );
               }
             );
@@ -566,9 +547,9 @@ export default function WatchPage() {
     userId,
   ]);
 
-  // ======================================================
+  // ====================================================
   // GET COMMENTS
-  // ======================================================
+  // ====================================================
 
   useEffect(() => {
     if (
@@ -578,60 +559,62 @@ export default function WatchPage() {
       return;
     }
 
-    const getComments =
-      async () => {
-        try {
-          setCommentsLoading(
-            true
+    const getComments = async () => {
+      try {
+        setCommentsLoading(true);
+
+        const response =
+          await fetch(
+            `${BACKEND_URL}/comment/${id}`,
+            {
+              method: "GET",
+              cache: "no-store",
+            }
           );
 
-          const response =
-            await fetch(
-              `${BACKEND_URL}/comment/${id}`
-            );
+        console.log(
+          "Comments API status:",
+          response.status
+        );
 
-          if (!response.ok) {
-            throw new Error(
-              "Could not get comments"
-            );
-          }
-
-          const data =
-            await response.json();
-
-          console.log(
-            "Comments:",
-            data
-          );
-
-          if (
-            Array.isArray(
-              data?.comments
-            )
-          ) {
-            setComments(
-              data.comments
-            );
-          } else if (
-            Array.isArray(data)
-          ) {
-            setComments(data);
-          } else {
-            setComments([]);
-          }
-        } catch (error) {
-          console.error(
-            "Get comments error:",
-            error
-          );
-
-          setComments([]);
-        } finally {
-          setCommentsLoading(
-            false
-          );
+        if (!response.ok) {
+          throw new Error(`Comments API failed: ${response.status}`);
         }
-      };
+
+        const data =
+          await response.json();
+
+        console.log(
+          "Comments response:",
+          data
+        );
+
+        if (
+          Array.isArray(
+            data?.comments
+          )
+        ) {
+          setComments(
+            data.comments
+          );
+        } else if (
+          Array.isArray(data)
+        ) {
+          setComments(data);
+        } else {
+          setComments([]);
+        }
+      } catch (error) {
+        console.error(
+          "Get comments error:",
+          error
+        );
+
+        setComments([]);
+      } finally {
+        setCommentsLoading(false);
+      }
+    };
 
     getComments();
   }, [
@@ -639,9 +622,9 @@ export default function WatchPage() {
     id,
   ]);
 
-  // ======================================================
+  // ====================================================
   // LIKE / DISLIKE
-  // ======================================================
+  // ====================================================
 
   const sendLikeAction = async (
     action:
@@ -652,7 +635,6 @@ export default function WatchPage() {
       alert(
         "Please login first."
       );
-
       return;
     }
 
@@ -671,23 +653,19 @@ export default function WatchPage() {
         return;
       }
 
-      setDislikeLoading(
-        true
-      );
+      setDislikeLoading(true);
     }
 
     try {
       const response =
         await fetch(
-          `${BACKEND_URL}/like/${video._id}`,
+        `${BACKEND_URL}/like/${video._id}`,
           {
             method: "POST",
-
             headers: {
               "Content-Type":
                 "application/json",
             },
-
             body: JSON.stringify({
               userId,
               action,
@@ -754,10 +732,7 @@ export default function WatchPage() {
 
           return {
             ...previous,
-
-            Like:
-              newLikeCount,
-
+            Like: newLikeCount,
             Dislike:
               newDislikeCount,
           };
@@ -765,7 +740,7 @@ export default function WatchPage() {
       );
     } catch (error) {
       console.error(
-        `${action} error:`,
+      `${action} error:`,
         error
       );
 
@@ -774,20 +749,16 @@ export default function WatchPage() {
       );
     } finally {
       if (action === "like") {
-        setLikeLoading(
-          false
-        );
+        setLikeLoading(false);
       } else {
-        setDislikeLoading(
-          false
-        );
+        setDislikeLoading(false);
       }
     }
   };
 
-  // ======================================================
+  // ====================================================
   // LIKE
-  // ======================================================
+  // ====================================================
 
   const handleLike = async () => {
     await sendLikeAction(
@@ -795,9 +766,9 @@ export default function WatchPage() {
     );
   };
 
-  // ======================================================
+  // ====================================================
   // DISLIKE
-  // ======================================================
+  // ====================================================
 
   const handleDislike =
     async () => {
@@ -806,9 +777,9 @@ export default function WatchPage() {
       );
     };
 
-  // ======================================================
+  // ====================================================
   // WATCH LATER
-  // ======================================================
+  // ====================================================
 
   const handleWatchLater =
     async () => {
@@ -816,7 +787,6 @@ export default function WatchPage() {
         alert(
           "Please login to use Watch Later."
         );
-
         return;
       }
 
@@ -830,12 +800,10 @@ export default function WatchPage() {
             `${BACKEND_URL}/watchlater/${video._id}`,
             {
               method: "POST",
-
               headers: {
                 "Content-Type":
                   "application/json",
               },
-
               body: JSON.stringify({
                 userId,
               }),
@@ -872,9 +840,9 @@ export default function WatchPage() {
       }
     };
 
-  // ======================================================
+  // ====================================================
   // ADD COMMENT
-  // ======================================================
+  // ====================================================
 
   const handleComment =
     async () => {
@@ -882,7 +850,6 @@ export default function WatchPage() {
         alert(
           "Please login to comment."
         );
-
         return;
       }
 
@@ -900,22 +867,18 @@ export default function WatchPage() {
         return;
       }
 
-      setCommentLoading(
-        true
-      );
+      setCommentLoading(true);
 
       try {
         const response =
           await fetch(
-            `${BACKEND_URL}/comment/${video._id}`,
+          `${BACKEND_URL}/comment/${video._id}`,
             {
               method: "POST",
-
               headers: {
                 "Content-Type":
                   "application/json",
               },
-
               body: JSON.stringify({
                 userId,
                 comment:
@@ -959,15 +922,13 @@ export default function WatchPage() {
           "Could not add comment."
         );
       } finally {
-        setCommentLoading(
-          false
-        );
+        setCommentLoading(false);
       }
     };
 
-  // ======================================================
+  // ====================================================
   // DELETE COMMENT
-  // ======================================================
+  // ====================================================
 
   const handleDeleteComment =
     async (
@@ -977,22 +938,19 @@ export default function WatchPage() {
         alert(
           "Please login first."
         );
-
         return;
       }
 
       try {
         const response =
           await fetch(
-            `${BACKEND_URL}/comment/${commentId}`,
+          `${BACKEND_URL}/comment/${commentId}`,
             {
               method: "DELETE",
-
               headers: {
                 "Content-Type":
                   "application/json",
               },
-
               body: JSON.stringify({
                 userId,
               }),
@@ -1034,9 +992,49 @@ export default function WatchPage() {
       }
     };
 
-  // ======================================================
+  // ====================================================
+  // SHARE
+  // ====================================================
+
+  const handleShare = async () => {
+    try {
+      if (
+        typeof navigator ===
+        "undefined"
+      ) {
+        return;
+      }
+
+      if (navigator.share) {
+        await navigator.share({
+          title:
+            video?.videotitle ||
+            "Video",
+          url:
+            window.location.href,
+        });
+      } else if (
+        navigator.clipboard
+      ) {
+        await navigator.clipboard.writeText(
+          window.location.href
+        );
+
+        alert(
+          "Video link copied!"
+        );
+      }
+    } catch (error) {
+      console.error(
+        "Share error:",
+        error
+      );
+    }
+  };
+
+  // ====================================================
   // LOADING
-  // ======================================================
+  // ====================================================
 
   if (loading) {
     return (
@@ -1048,9 +1046,9 @@ export default function WatchPage() {
     );
   }
 
-  // ======================================================
+  // ====================================================
   // VIDEO NOT FOUND
-  // ======================================================
+  // ====================================================
 
   if (!video) {
     return (
@@ -1064,10 +1062,6 @@ export default function WatchPage() {
             Video ID: {id}
           </p>
 
-          <p className="mt-1 text-xs text-gray-400">
-            Backend: {BACKEND_URL}
-          </p>
-
           <Link
             href="/"
             className="mt-4 inline-block rounded-lg bg-black px-5 py-2 text-white"
@@ -1079,84 +1073,32 @@ export default function WatchPage() {
     );
   }
 
-  // ======================================================
+  // ====================================================
   // VIDEO URL
-  // ======================================================
+  // ====================================================
 
   const videoUrl =
     getVideoUrl(
       video.filepath
     );
 
-  console.log(
-    "Playing video:",
-    videoUrl
-  );
-
-  // ======================================================
-  // SHARE
-  // ======================================================
-
-  const handleShare =
-    async () => {
-      try {
-        if (
-          typeof navigator ===
-          "undefined"
-        ) {
-          return;
-        }
-
-        if (
-          navigator.share
-        ) {
-          await navigator.share({
-            title:
-              video.videotitle,
-            url:
-              window.location
-                .href,
-          });
-        } else if (
-          navigator.clipboard
-        ) {
-          await navigator.clipboard.writeText(
-            window.location.href
-          );
-
-          alert(
-            "Video link copied!"
-          );
-        }
-      } catch (error) {
-        console.error(
-          "Share error:",
-          error
-        );
-      }
-    };
-
-  // ======================================================
+  // ====================================================
   // PAGE
-  // ======================================================
+  // ====================================================
 
   return (
     <div className="min-h-screen bg-white">
-
       <div className="mx-auto flex max-w-[1400px] gap-6 px-4 py-5">
 
         {/* =================================================
-            LEFT SIDE
+            MAIN CONTENT
         ================================================= */}
 
         <main className="min-w-0 flex-1">
 
-          {/* =================================================
-              VIDEO PLAYER
-          ================================================= */}
+          {/* VIDEO PLAYER */}
 
           <div className="overflow-hidden rounded-xl bg-black">
-
             {videoUrl ? (
               <video
                 key={videoUrl}
@@ -1181,27 +1123,21 @@ export default function WatchPage() {
                 Video unavailable
               </div>
             )}
-
           </div>
 
-          {/* =================================================
-              TITLE
-          ================================================= */}
+          {/* TITLE */}
 
           <h1 className="mt-4 text-xl font-bold text-black">
             {video.videotitle}
           </h1>
 
-          {/* =================================================
-              CHANNEL + BUTTONS
-          ================================================= */}
+          {/* CHANNEL + BUTTONS */}
 
           <div className="mt-3 flex flex-wrap items-center gap-3">
 
             {/* CHANNEL */}
 
             <div className="flex items-center gap-3">
-
               <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-200">
                 <UserCircle size={25} />
               </div>
@@ -1217,7 +1153,6 @@ export default function WatchPage() {
                   1.2M subscribers
                 </p>
               </div>
-
             </div>
 
             {/* SUBSCRIBE */}
@@ -1233,12 +1168,8 @@ export default function WatchPage() {
 
             <button
               type="button"
-              onClick={
-                handleLike
-              }
-              disabled={
-                likeLoading
-              }
+              onClick={handleLike}
+              disabled={likeLoading}
               className={`flex items-center gap-2 rounded-full px-4 py-2 transition ${
                 liked
                   ? "bg-black text-white"
@@ -1268,9 +1199,7 @@ export default function WatchPage() {
                   : "bg-gray-100 text-black hover:bg-gray-200"
               } disabled:cursor-not-allowed disabled:opacity-60`}
             >
-              <ThumbsDown
-                size={18}
-              />
+              <ThumbsDown size={18} />
 
               <span>
                 {dislikeCount.toLocaleString()}
@@ -1303,13 +1232,10 @@ export default function WatchPage() {
 
             <button
               type="button"
-              onClick={
-                handleShare
-              }
+              onClick={handleShare}
               className="flex items-center gap-2 rounded-full bg-gray-100 px-4 py-2 hover:bg-gray-200"
             >
               <Share2 size={18} />
-
               Share
             </button>
 
@@ -1324,10 +1250,7 @@ export default function WatchPage() {
                 }
                 className="flex items-center gap-2 rounded-full bg-gray-100 px-4 py-2 hover:bg-gray-200"
               >
-                <Download
-                  size={18}
-                />
-
+                <Download size={18} />
                 Download
               </a>
             )}
@@ -1342,21 +1265,15 @@ export default function WatchPage() {
                 size={20}
               />
             </button>
-
           </div>
 
-          {/* =================================================
-              DESCRIPTION
-          ================================================= */}
+          {/* DESCRIPTION */}
 
           <div className="mt-4 rounded-xl bg-gray-100 p-4">
-
             <div className="mb-2 flex gap-3 text-sm font-semibold">
-
               <span>
                 {(
-                  video.views ||
-                  0
+                  video.views || 0
                 ).toLocaleString()}{" "}
                 views
               </span>
@@ -1368,46 +1285,39 @@ export default function WatchPage() {
                     ).toLocaleDateString()
                   : ""}
               </span>
-
             </div>
 
             <p className="text-sm text-gray-700">
               This video was uploaded
               to your YouTube Clone.
             </p>
-
           </div>
 
           {/* =================================================
-              COMMENTS
+              COMMENTS SECTION
           ================================================= */}
 
-          <div className="mt-6">
+          <section className="mt-8">
+
+            {/* COMMENT COUNT */}
 
             <h2 className="mb-5 text-xl font-bold">
-
               {comments.length}{" "}
-
-              {comments.length ===
-              1
+              {comments.length === 1
                 ? "Comment"
                 : "Comments"}
-
             </h2>
 
             {/* ADD COMMENT */}
 
             <div className="flex items-center gap-3">
 
-              {/* USER IMAGE */}
+              {/* PROFILE IMAGE */}
 
               <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gray-200">
-
                 {user?.image ? (
                   <img
-                    src={
-                      user.image
-                    }
+                    src={user.image}
                     alt="Profile"
                     className="h-full w-full object-cover"
                   />
@@ -1416,34 +1326,25 @@ export default function WatchPage() {
                     size={25}
                   />
                 )}
-
               </div>
 
               {/* INPUT */}
 
               <input
                 type="text"
-                value={
-                  commentText
-                }
-                onChange={(
-                  event
-                ) =>
+                value={commentText}
+                onChange={(event) =>
                   setCommentText(
-                    event.target
-                      .value
+                    event.target.value
                   )
                 }
-                onKeyDown={(
-                  event
-                ) => {
+                onKeyDown={(event) => {
                   if (
                     event.key ===
                       "Enter" &&
                     !event.shiftKey
                   ) {
                     event.preventDefault();
-
                     handleComment();
                   }
                 }}
@@ -1459,7 +1360,7 @@ export default function WatchPage() {
                 className="w-full border-b border-gray-300 px-2 py-3 outline-none focus:border-black disabled:cursor-not-allowed disabled:bg-gray-50"
               />
 
-              {/* SEND */}
+              {/* SEND BUTTON */}
 
               <button
                 type="button"
@@ -1475,19 +1376,17 @@ export default function WatchPage() {
               >
                 <Send size={18} />
               </button>
-
             </div>
 
             {/* COMMENTS LIST */}
 
-            <div className="mt-6 space-y-6">
+            <div className="mt-7 space-y-6">
 
               {commentsLoading ? (
                 <p className="text-sm text-gray-500">
                   Loading comments...
                 </p>
-              ) : comments.length ===
-                0 ? (
+              ) : comments.length === 0 ? (
                 <p className="text-sm text-gray-500">
                   No comments yet.
                   Be the first to
@@ -1497,41 +1396,32 @@ export default function WatchPage() {
                 comments.map(
                   (item) => {
                     const commentUserId =
-                      item.viewer
-                        ?._id ||
+                      item.viewer?._id ||
                       "";
 
                     const isOwner =
                       String(
                         commentUserId
                       ) ===
-                      String(
-                        userId
-                      );
+                      String(userId);
 
                     return (
                       <div
-                        key={
-                          item._id
-                        }
+                        key={item._id}
                         className="flex gap-3"
                       >
 
                         {/* PROFILE */}
 
                         <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gray-200">
-
-                          {item.viewer
-                            ?.image ? (
+                          {item.viewer?.image ? (
                             <img
                               src={
-                                item
-                                  .viewer
+                                item.viewer
                                   .image
                               }
                               alt={
-                                item
-                                  .viewer
+                                item.viewer
                                   .name ||
                                 "User"
                               }
@@ -1539,26 +1429,21 @@ export default function WatchPage() {
                             />
                           ) : (
                             <UserCircle
-                              size={
-                                25
-                              }
+                              size={25}
                             />
                           )}
-
                         </div>
 
-                        {/* CONTENT */}
+                        {/* COMMENT CONTENT */}
 
                         <div className="min-w-0 flex-1">
 
                           <div className="flex flex-wrap items-center gap-2">
 
                             <p className="font-semibold">
-                              {item
-                                .viewer
+                              {item.viewer
                                 ?.name ||
-                                item
-                                  .viewer
+                                item.viewer
                                   ?.email ||
                                 "User"}
                             </p>
@@ -1571,13 +1456,18 @@ export default function WatchPage() {
                                 : ""}
                             </span>
 
+                            {item.isEdited && (
+                              <span className="text-xs text-gray-400">
+                                (edited)
+                              </span>
+                            )}
                           </div>
 
                           <p className="mt-1 whitespace-pre-wrap text-sm text-gray-700">
-                            {
-                              item.comment
-                            }
+                            {item.comment}
                           </p>
+
+                          {/* DELETE */}
 
                           {isOwner && (
                             <button
@@ -1592,28 +1482,21 @@ export default function WatchPage() {
                               Delete
                             </button>
                           )}
-
                         </div>
-
                       </div>
                     );
                   }
                 )
               )}
-
             </div>
-
-          </div>
-
+          </section>
         </main>
 
         {/* =================================================
-            RIGHT SIDE
             RECOMMENDED VIDEOS
         ================================================= */}
 
         <aside className="hidden w-[360px] shrink-0 lg:block">
-
           <div className="space-y-4">
 
             {recommended.map(
@@ -1625,9 +1508,7 @@ export default function WatchPage() {
 
                 return (
                   <Link
-                    key={
-                      item._id
-                    }
+                    key={item._id}
                     href={`/watch/${item._id}`}
                     className="flex gap-3"
                   >
@@ -1643,9 +1524,7 @@ export default function WatchPage() {
                           preload="metadata"
                         >
                           <source
-                            src={
-                              itemUrl
-                            }
+                            src={itemUrl}
                             type={
                               item.filetype ||
                               "video/mp4"
@@ -1657,7 +1536,6 @@ export default function WatchPage() {
                           Video
                         </div>
                       )}
-
                     </div>
 
                     {/* DETAILS */}
@@ -1665,9 +1543,7 @@ export default function WatchPage() {
                     <div className="min-w-0">
 
                       <h3 className="line-clamp-2 text-sm font-semibold">
-                        {
-                          item.videotitle
-                        }
+                        {item.videotitle}
                       </h3>
 
                       <p className="mt-1 text-xs text-gray-500">
@@ -1683,20 +1559,14 @@ export default function WatchPage() {
                         ).toLocaleString()}{" "}
                         views
                       </p>
-
                     </div>
-
                   </Link>
                 );
               }
             )}
-
           </div>
-
         </aside>
-
       </div>
-
     </div>
   );
 }
