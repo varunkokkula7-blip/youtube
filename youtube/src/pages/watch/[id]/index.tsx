@@ -26,41 +26,73 @@ const BACKEND_URL =
   process.env.NEXT_PUBLIC_BACKEND_URL ||
   "https://youtube-hiv1.onrender.com";
 
+// Helper: return an absolute API URL. Prefer an absolute BACKEND_URL when available.
+// If no BACKEND_URL is configured, fall back to http://localhost:5000 so client requests reach the backend
+// during local development instead of the Next dev server.
+const getApiUrl = (path: string) => {
+  const p = path.startsWith("/") ? path : `/${path}`;
+
+  // Prefer an explicit absolute BACKEND_URL
+  if (typeof BACKEND_URL === "string" && /^https?:\/\//i.test(BACKEND_URL)) {
+    return `${BACKEND_URL.replace(/\/$/, "")}${p}`;
+  }
+
+  // On server-side, if BACKEND_URL is non-empty and not absolute, still return it (edge case)
+  if (typeof window === "undefined") {
+    if (BACKEND_URL) {
+      return `${BACKEND_URL.replace(/\/$/, "")}${p}`;
+    }
+    // Default server-side backend
+    return `http://localhost:5000${p}`;
+  }
+
+  // Client-side: prefer BACKEND_URL when it is absolute; otherwise use http://localhost:5000 during dev
+  if (BACKEND_URL && /^https?:\/\//i.test(BACKEND_URL)) {
+    return `${BACKEND_URL.replace(/\/$/, "")}${p}`;
+  }
+
+  // Final safe fallback for the browser
+  return `http://localhost:5000${p}`;
+};
+
 // ======================================================
-// TYPES
+// VIDEO TYPE
 // ======================================================
 
 type Video = {
   _id: string;
   videotitle: string;
-
   filename?: string;
   filetype?: string;
   filepath?: string;
   filesize?: number;
-
   videochanel?: string;
   videochannel?: string;
-
   Like?: number;
   Dislike?: number;
   likes?: number;
   dislikes?: number;
-
   views?: number;
-
   uploader?: string;
-
   createdAt?: string;
   updatedAt?: string;
 };
 
+// ======================================================
+// USER TYPE
+// ======================================================
+
 type CommentUser = {
   _id?: string;
+  id?: string;
   name?: string;
   email?: string;
   image?: string;
 };
+
+// ======================================================
+// COMMENT TYPE
+// ======================================================
 
 type Comment = {
   _id: string;
@@ -70,11 +102,11 @@ type Comment = {
   createdAt: string;
   updatedAt?: string;
 
-  language?: string;
-  parentCommentId?: string | null;
-  isEdited?: boolean;
-  editedAt?: string | null;
-  isDeleted?: boolean;
+  likes?: string[];
+  dislikes?: string[];
+
+  likeCount?: number;
+  dislikeCount?: number;
 };
 
 // ======================================================
@@ -83,7 +115,6 @@ type Comment = {
 
 export default function WatchPage() {
   const router = useRouter();
-
   const { user } = useUser();
 
   // ====================================================
@@ -118,7 +149,7 @@ export default function WatchPage() {
     useState(true);
 
   // ====================================================
-  // LIKE STATES
+  // VIDEO LIKE / DISLIKE
   // ====================================================
 
   const [likeCount, setLikeCount] =
@@ -163,7 +194,17 @@ export default function WatchPage() {
     useState(false);
 
   // ====================================================
-  // VIDEO URL
+  // COMMENT LIKE LOADING
+  // ====================================================
+
+  const [commentLikeLoading, setCommentLikeLoading] =
+    useState<string | null>(null);
+
+  const [commentDislikeLoading, setCommentDislikeLoading] =
+    useState<string | null>(null);
+
+  // ====================================================
+  // GET VIDEO URL
   // ====================================================
 
   const getVideoUrl = (
@@ -175,13 +216,10 @@ export default function WatchPage() {
 
     let cleanPath = filepath;
 
-    // Convert Windows path to normal URL path
     cleanPath = cleanPath.replace(/\\/g, "/");
 
-    // Remove leading /
     cleanPath = cleanPath.replace(/^\/+/, "");
 
-    // Remove uploads/ if already present
     cleanPath = cleanPath.replace(
       /^uploads\//i,
       ""
@@ -214,40 +252,16 @@ export default function WatchPage() {
       try {
         setLoading(true);
 
-        console.log(
-          "Backend URL:",
-          BACKEND_URL
-        );
-
-        console.log(
-          "Video ID:",
-          id
-        );
-
-        const response = await fetch(
-          `${BACKEND_URL}/video/getall`,
-          {
-            method: "GET",
-            cache: "no-store",
-          }
-        );
-
-        console.log(
-          "Video API status:",
-          response.status
-        );
+        const response = await fetch(getApiUrl(`/video/getall`), { method: "GET", cache: "no-store" });
 
         if (!response.ok) {
-          throw new Error(`Video API failed: ${response.status}`);
+          throw new Error(
+            `Video API failed: ${response.status}`
+          );
         }
 
         const data =
           await response.json();
-
-        console.log(
-          "Video API response:",
-          data
-        );
 
         let allVideos: Video[] = [];
 
@@ -264,14 +278,8 @@ export default function WatchPage() {
         } else if (
           Array.isArray(data?.data?.videos)
         ) {
-          allVideos =
-            data.data.videos;
+          allVideos = data.data.videos;
         }
-
-        console.log(
-          "All videos:",
-          allVideos
-        );
 
         const selectedVideo =
           allVideos.find(
@@ -279,11 +287,6 @@ export default function WatchPage() {
               String(item._id) ===
               String(id)
           );
-
-        console.log(
-          "Selected video:",
-          selectedVideo
-        );
 
         setVideo(
           selectedVideo || null
@@ -330,7 +333,7 @@ export default function WatchPage() {
   }, [router.isReady, id]);
 
   // ====================================================
-  // ADD VIDEO TO HISTORY
+  // ADD HISTORY
   // ====================================================
 
   useEffect(() => {
@@ -344,28 +347,19 @@ export default function WatchPage() {
 
     const addHistory = async () => {
       try {
-        const response =
-          await fetch(
-            `${BACKEND_URL}/history/add`,
-            {
-              method: "POST",
-              headers: {
-                "Content-Type":
-                  "application/json",
-              },
-              body: JSON.stringify({
-                userId,
-                videoId: id,
-              }),
-            }
-          );
-
-        const data =
-          await response.json();
-
-        console.log(
-          "History response:",
-          data
+        await fetch(
+          getApiUrl(`/history/add`),
+          {
+            method: "POST",
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+            body: JSON.stringify({
+              userId,
+              videoId: id,
+            }),
+          }
         );
       } catch (error) {
         console.error(
@@ -383,7 +377,7 @@ export default function WatchPage() {
   ]);
 
   // ====================================================
-  // CHECK LIKE
+  // CHECK VIDEO LIKE
   // ====================================================
 
   useEffect(() => {
@@ -397,10 +391,9 @@ export default function WatchPage() {
 
     const checkLike = async () => {
       try {
-        const response =
-          await fetch(
-          `${BACKEND_URL}/like/user/${userId}`
-          );
+        const response = await fetch(
+          getApiUrl(`/like/user/${userId}`)
+        );
 
         if (!response.ok) {
           return;
@@ -408,11 +401,6 @@ export default function WatchPage() {
 
         const data =
           await response.json();
-
-        console.log(
-          "Like response:",
-          data
-        );
 
         let likedVideos: any[] = [];
 
@@ -479,7 +467,7 @@ export default function WatchPage() {
         try {
           const response =
             await fetch(
-              `${BACKEND_URL}/watchlater/user/${userId}`
+              getApiUrl(`/watchlater/user/${userId}`)
             );
 
           if (!response.ok) {
@@ -489,20 +477,15 @@ export default function WatchPage() {
           const data =
             await response.json();
 
-          console.log(
-            "Watch Later response:",
-            data
-          );
-
-          let savedVideos: any[] = [];
+          let savedVideos: any[] =
+            [];
 
           if (Array.isArray(data)) {
             savedVideos = data;
           } else if (
             Array.isArray(data?.videos)
           ) {
-            savedVideos =
-              data.videos;
+            savedVideos = data.videos;
           } else if (
             Array.isArray(
               data?.watchLater
@@ -565,45 +548,68 @@ export default function WatchPage() {
 
         const response =
           await fetch(
-            `${BACKEND_URL}/comment/${id}`,
+            getApiUrl(`/comment/${id}`),
             {
               method: "GET",
               cache: "no-store",
             }
           );
 
-        console.log(
-          "Comments API status:",
-          response.status
-        );
-
         if (!response.ok) {
-          throw new Error(`Comments API failed: ${response.status}`);
+          throw new Error(
+            `Comments API failed: ${response.status}`
+          );
         }
 
         const data =
           await response.json();
 
-        console.log(
-          "Comments response:",
-          data
-        );
+        let receivedComments: Comment[] =
+          [];
 
         if (
           Array.isArray(
             data?.comments
           )
         ) {
-          setComments(
-            data.comments
-          );
+          receivedComments =
+            data.comments;
         } else if (
           Array.isArray(data)
         ) {
-          setComments(data);
-        } else {
-          setComments([]);
+          receivedComments = data;
         }
+
+        const formattedComments =
+          receivedComments.map(
+            (item: any) => ({
+              ...item,
+
+              likes:
+                item?.likes || [],
+
+              dislikes:
+                item?.dislikes || [],
+
+              likeCount:
+                Number(
+                  item?.likeCount ??
+                    item?.likes?.length ??
+                    0
+                ),
+
+              dislikeCount:
+                Number(
+                  item?.dislikeCount ??
+                    item?.dislikes?.length ??
+                    0
+                ),
+            })
+          );
+
+        setComments(
+          formattedComments
+        );
       } catch (error) {
         console.error(
           "Get comments error:",
@@ -623,18 +629,14 @@ export default function WatchPage() {
   ]);
 
   // ====================================================
-  // LIKE / DISLIKE
+  // VIDEO LIKE / DISLIKE
   // ====================================================
 
   const sendLikeAction = async (
-    action:
-      | "like"
-      | "dislike"
+    action: "like" | "dislike"
   ) => {
     if (!userId) {
-      alert(
-        "Please login first."
-      );
+      alert("Please login first.");
       return;
     }
 
@@ -659,7 +661,7 @@ export default function WatchPage() {
     try {
       const response =
         await fetch(
-        `${BACKEND_URL}/like/${video._id}`,
+          getApiUrl(`/like/${video._id}`),
           {
             method: "POST",
             headers: {
@@ -676,11 +678,6 @@ export default function WatchPage() {
       const data =
         await response.json();
 
-      console.log(
-        `${action} response:`,
-        data
-      );
-
       if (!response.ok) {
         throw new Error(
           data?.message ||
@@ -692,14 +689,16 @@ export default function WatchPage() {
         Number(
           data?.Like ??
             data?.likes ??
-            0
+            data?.video?.Like ??
+            likeCount
         );
 
       const newDislikeCount =
         Number(
           data?.Dislike ??
             data?.dislikes ??
-            0
+            data?.video?.Dislike ??
+            dislikeCount
         );
 
       setLikeCount(
@@ -740,7 +739,7 @@ export default function WatchPage() {
       );
     } catch (error) {
       console.error(
-      `${action} error:`,
+        `${action} error:`,
         error
       );
 
@@ -756,26 +755,15 @@ export default function WatchPage() {
     }
   };
 
-  // ====================================================
-  // LIKE
-  // ====================================================
-
   const handleLike = async () => {
-    await sendLikeAction(
-      "like"
-    );
+    await sendLikeAction("like");
   };
 
-  // ====================================================
-  // DISLIKE
-  // ====================================================
-
-  const handleDislike =
-    async () => {
-      await sendLikeAction(
-        "dislike"
-      );
-    };
+  const handleDislike = async () => {
+    await sendLikeAction(
+      "dislike"
+    );
+  };
 
   // ====================================================
   // WATCH LATER
@@ -797,7 +785,7 @@ export default function WatchPage() {
       try {
         const response =
           await fetch(
-            `${BACKEND_URL}/watchlater/${video._id}`,
+            getApiUrl(`/watchlater/${video._id}`),
             {
               method: "POST",
               headers: {
@@ -812,11 +800,6 @@ export default function WatchPage() {
 
         const data =
           await response.json();
-
-        console.log(
-          "Watch Later response:",
-          data
-        );
 
         if (!response.ok) {
           throw new Error(
@@ -853,9 +836,7 @@ export default function WatchPage() {
         return;
       }
 
-      if (
-        !commentText.trim()
-      ) {
+      if (!commentText.trim()) {
         return;
       }
 
@@ -872,7 +853,7 @@ export default function WatchPage() {
       try {
         const response =
           await fetch(
-          `${BACKEND_URL}/comment/${video._id}`,
+            getApiUrl(`/comment/${video._id}`),
             {
               method: "POST",
               headers: {
@@ -890,11 +871,6 @@ export default function WatchPage() {
         const data =
           await response.json();
 
-        console.log(
-          "Comment response:",
-          data
-        );
-
         if (!response.ok) {
           throw new Error(
             data?.message ||
@@ -903,9 +879,17 @@ export default function WatchPage() {
         }
 
         if (data?.comment) {
+          const newComment: Comment = {
+            ...data.comment,
+            likes: [],
+            dislikes: [],
+            likeCount: 0,
+            dislikeCount: 0,
+          };
+
           setComments(
             (previous) => [
-              data.comment,
+              newComment,
               ...previous,
             ]
           );
@@ -927,6 +911,262 @@ export default function WatchPage() {
     };
 
   // ====================================================
+  // COMMENT LIKE
+  // ====================================================
+
+  const handleCommentLike =
+    async (
+      commentId: string
+    ) => {
+      if (!userId) {
+        alert(
+          "Please login first."
+        );
+        return;
+      }
+
+      if (
+        commentLikeLoading ===
+        commentId
+      ) {
+        return;
+      }
+
+      setCommentLikeLoading(
+        commentId
+      );
+
+      try {
+        const response =
+          await fetch(
+            getApiUrl(`/comment/${commentId}/like`),
+            {
+              method: "POST",
+              headers: {
+                "Content-Type":
+                  "application/json",
+              },
+              body: JSON.stringify({
+                userId,
+              }),
+            }
+          );
+
+        const data =
+          await response.json();
+
+        console.log(
+          "COMMENT LIKE:",
+          data
+        );
+
+        if (!response.ok) {
+          throw new Error(
+            data?.message ||
+              "Could not like comment"
+          );
+        }
+
+        setComments(
+          (previous) =>
+            previous.map(
+              (item) => {
+                if (
+                  item._id !==
+                  commentId
+                ) {
+                  return item;
+                }
+
+                return {
+                  ...item,
+
+                  likeCount:
+                    Number(
+                      data.likeCount ??
+                        0
+                    ),
+
+                  dislikeCount:
+                    Number(
+                      data.dislikeCount ??
+                        0
+                    ),
+
+                  likes:
+                    data.liked
+                      ? [
+                          ...(item.likes ||
+                            []),
+                          userId,
+                        ]
+                      : (
+                          item.likes ||
+                          []
+                        ).filter(
+                          (id) =>
+                            String(id) !==
+                            String(userId)
+                        ),
+
+                  dislikes:
+                    (
+                      item.dislikes ||
+                      []
+                    ).filter(
+                      (id) =>
+                        String(id) !==
+                        String(userId)
+                    ),
+                };
+              }
+            )
+        );
+      } catch (error) {
+        console.error(
+          "Comment like error:",
+          error
+        );
+
+        alert(
+          "Could not like comment."
+        );
+      } finally {
+        setCommentLikeLoading(
+          null
+        );
+      }
+    };
+
+  // ====================================================
+  // COMMENT DISLIKE
+  // ====================================================
+
+  const handleCommentDislike =
+    async (
+      commentId: string
+    ) => {
+      if (!userId) {
+        alert(
+          "Please login first."
+        );
+        return;
+      }
+
+      if (
+        commentDislikeLoading ===
+        commentId
+      ) {
+        return;
+      }
+
+      setCommentDislikeLoading(
+        commentId
+      );
+
+      try {
+        const response =
+          await fetch(
+            getApiUrl(`/comment/${commentId}/dislike`),
+            {
+              method: "POST",
+              headers: {
+                "Content-Type":
+                  "application/json",
+              },
+              body: JSON.stringify({
+                userId,
+              }),
+            }
+          );
+
+        const data =
+          await response.json();
+
+        console.log(
+          "COMMENT DISLIKE:",
+          data
+        );
+
+        if (!response.ok) {
+          throw new Error(
+            data?.message ||
+              "Could not dislike comment"
+          );
+        }
+
+        setComments(
+          (previous) =>
+            previous.map(
+              (item) => {
+                if (
+                  item._id !==
+                  commentId
+                ) {
+                  return item;
+                }
+
+                return {
+                  ...item,
+
+                  likeCount:
+                    Number(
+                      data.likeCount ??
+                        0
+                    ),
+
+                  dislikeCount:
+                    Number(
+                      data.dislikeCount ??
+                        0
+                    ),
+
+                  dislikes:
+                    data.disliked
+                      ? [
+                          ...(item.dislikes ||
+                            []),
+                          userId,
+                        ]
+                      : (
+                          item.dislikes ||
+                          []
+                        ).filter(
+                          (id) =>
+                            String(id) !==
+                            String(userId)
+                        ),
+
+                  likes:
+                    (
+                      item.likes ||
+                      []
+                    ).filter(
+                      (id) =>
+                        String(id) !==
+                        String(userId)
+                    ),
+                };
+              }
+            )
+        );
+      } catch (error) {
+        console.error(
+          "Comment dislike error:",
+          error
+        );
+
+        alert(
+          "Could not dislike comment."
+        );
+      } finally {
+        setCommentDislikeLoading(
+          null
+        );
+      }
+    };
+
+  // ====================================================
   // DELETE COMMENT
   // ====================================================
 
@@ -944,7 +1184,7 @@ export default function WatchPage() {
       try {
         const response =
           await fetch(
-          `${BACKEND_URL}/comment/${commentId}`,
+            getApiUrl(`/comment/${commentId}`),
             {
               method: "DELETE",
               headers: {
@@ -959,11 +1199,6 @@ export default function WatchPage() {
 
         const data =
           await response.json();
-
-        console.log(
-          "Delete comment response:",
-          data
-        );
 
         if (!response.ok) {
           throw new Error(
@@ -996,41 +1231,42 @@ export default function WatchPage() {
   // SHARE
   // ====================================================
 
-  const handleShare = async () => {
-    try {
-      if (
-        typeof navigator ===
-        "undefined"
-      ) {
-        return;
-      }
+  const handleShare =
+    async () => {
+      try {
+        if (
+          typeof navigator ===
+          "undefined"
+        ) {
+          return;
+        }
 
-      if (navigator.share) {
-        await navigator.share({
-          title:
-            video?.videotitle ||
-            "Video",
-          url:
-            window.location.href,
-        });
-      } else if (
-        navigator.clipboard
-      ) {
-        await navigator.clipboard.writeText(
-          window.location.href
-        );
+        if (navigator.share) {
+          await navigator.share({
+            title:
+              video?.videotitle ||
+              "Video",
+            url:
+              window.location.href,
+          });
+        } else if (
+          navigator.clipboard
+        ) {
+          await navigator.clipboard.writeText(
+            window.location.href
+          );
 
-        alert(
-          "Video link copied!"
+          alert(
+            "Video link copied!"
+          );
+        }
+      } catch (error) {
+        console.error(
+          "Share error:",
+          error
         );
       }
-    } catch (error) {
-      console.error(
-        "Share error:",
-        error
-      );
-    }
-  };
+    };
 
   // ====================================================
   // LOADING
@@ -1039,7 +1275,7 @@ export default function WatchPage() {
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <p className="text-gray-500">
+        <p className="text-lg">
           Loading video...
         </p>
       </div>
@@ -1052,11 +1288,11 @@ export default function WatchPage() {
 
   if (!video) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
+      <div className="flex min-h-screen items-center justify-center px-4">
         <div className="text-center">
-          <p className="text-xl font-semibold text-red-500">
-            Video not found.
-          </p>
+          <h1 className="text-2xl font-bold">
+            Video not found
+          </h1>
 
           <p className="mt-2 text-sm text-gray-500">
             Video ID: {id}
@@ -1078,25 +1314,21 @@ export default function WatchPage() {
   // ====================================================
 
   const videoUrl =
-    getVideoUrl(
-      video.filepath
-    );
+    getVideoUrl(video.filepath);
 
   // ====================================================
   // PAGE
   // ====================================================
 
   return (
-    <div className="min-h-screen bg-white">
-      <div className="mx-auto flex max-w-[1400px] gap-6 px-4 py-5">
+    <div className="min-h-screen bg-white px-4 py-6">
+      <div className="mx-auto flex max-w-[1600px] gap-6">
 
-        {/* =================================================
-            MAIN CONTENT
-        ================================================= */}
+        {/* MAIN CONTENT */}
 
         <main className="min-w-0 flex-1">
 
-          {/* VIDEO PLAYER */}
+          {/* VIDEO */}
 
           <div className="overflow-hidden rounded-xl bg-black">
             {videoUrl ? (
@@ -1135,8 +1367,6 @@ export default function WatchPage() {
 
           <div className="mt-3 flex flex-wrap items-center gap-3">
 
-            {/* CHANNEL */}
-
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-200">
                 <UserCircle size={25} />
@@ -1155,8 +1385,6 @@ export default function WatchPage() {
               </div>
             </div>
 
-            {/* SUBSCRIBE */}
-
             <button
               type="button"
               className="rounded-full bg-black px-5 py-2 text-sm font-semibold text-white"
@@ -1164,7 +1392,7 @@ export default function WatchPage() {
               Subscribe
             </button>
 
-            {/* LIKE */}
+            {/* VIDEO LIKE */}
 
             <button
               type="button"
@@ -1174,7 +1402,7 @@ export default function WatchPage() {
                 liked
                   ? "bg-black text-white"
                   : "bg-gray-100 text-black hover:bg-gray-200"
-              } disabled:cursor-not-allowed disabled:opacity-60`}
+              }`}
             >
               <ThumbsUp size={18} />
 
@@ -1183,21 +1411,17 @@ export default function WatchPage() {
               </span>
             </button>
 
-            {/* DISLIKE */}
+            {/* VIDEO DISLIKE */}
 
             <button
               type="button"
-              onClick={
-                handleDislike
-              }
-              disabled={
-                dislikeLoading
-              }
+              onClick={handleDislike}
+              disabled={dislikeLoading}
               className={`flex items-center gap-2 rounded-full px-4 py-2 transition ${
                 disliked
                   ? "bg-black text-white"
                   : "bg-gray-100 text-black hover:bg-gray-200"
-              } disabled:cursor-not-allowed disabled:opacity-60`}
+              }`}
             >
               <ThumbsDown size={18} />
 
@@ -1210,9 +1434,7 @@ export default function WatchPage() {
 
             <button
               type="button"
-              onClick={
-                handleWatchLater
-              }
+              onClick={handleWatchLater}
               className={`flex items-center gap-2 rounded-full px-4 py-2 ${
                 watchLater
                   ? "bg-black text-white"
@@ -1255,15 +1477,11 @@ export default function WatchPage() {
               </a>
             )}
 
-            {/* MORE */}
-
             <button
               type="button"
               className="rounded-full bg-gray-100 p-2 hover:bg-gray-200"
             >
-              <MoreHorizontal
-                size={20}
-              />
+              <MoreHorizontal size={20} />
             </button>
           </div>
 
@@ -1273,7 +1491,8 @@ export default function WatchPage() {
             <div className="mb-2 flex gap-3 text-sm font-semibold">
               <span>
                 {(
-                  video.views || 0
+                  video.views ||
+                  0
                 ).toLocaleString()}{" "}
                 views
               </span>
@@ -1293,13 +1512,11 @@ export default function WatchPage() {
             </p>
           </div>
 
-          {/* =================================================
-              COMMENTS SECTION
-          ================================================= */}
+          {/* ==================================================
+              COMMENTS
+          ================================================== */}
 
           <section className="mt-8">
-
-            {/* COMMENT COUNT */}
 
             <h2 className="mb-5 text-xl font-bold">
               {comments.length}{" "}
@@ -1312,8 +1529,6 @@ export default function WatchPage() {
 
             <div className="flex items-center gap-3">
 
-              {/* PROFILE IMAGE */}
-
               <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gray-200">
                 {user?.image ? (
                   <img
@@ -1322,13 +1537,9 @@ export default function WatchPage() {
                     className="h-full w-full object-cover"
                   />
                 ) : (
-                  <UserCircle
-                    size={25}
-                  />
+                  <UserCircle size={25} />
                 )}
               </div>
-
-              {/* INPUT */}
 
               <input
                 type="text"
@@ -1340,8 +1551,7 @@ export default function WatchPage() {
                 }
                 onKeyDown={(event) => {
                   if (
-                    event.key ===
-                      "Enter" &&
+                    event.key === "Enter" &&
                     !event.shiftKey
                   ) {
                     event.preventDefault();
@@ -1360,13 +1570,9 @@ export default function WatchPage() {
                 className="w-full border-b border-gray-300 px-2 py-3 outline-none focus:border-black disabled:cursor-not-allowed disabled:bg-gray-50"
               />
 
-              {/* SEND BUTTON */}
-
               <button
                 type="button"
-                onClick={
-                  handleComment
-                }
+                onClick={handleComment}
                 disabled={
                   !userId ||
                   commentLoading ||
@@ -1388,84 +1594,172 @@ export default function WatchPage() {
                 </p>
               ) : comments.length === 0 ? (
                 <p className="text-sm text-gray-500">
-                  No comments yet.
-                  Be the first to
-                  comment.
+                  No comments yet. Be
+                  the first to comment.
                 </p>
               ) : (
-                comments.map(
-                  (item) => {
-                    const commentUserId =
-                      item.viewer?._id ||
-                      "";
+                comments.map((item) => {
 
-                    const isOwner =
-                      String(
-                        commentUserId
-                      ) ===
-                      String(userId);
+                  const commentUserId =
+                    item.viewer?._id ||
+                    item.viewer?.id ||
+                    "";
 
-                    return (
-                      <div
-                        key={item._id}
-                        className="flex gap-3"
-                      >
+                  const isOwner =
+                    String(
+                      commentUserId
+                    ) ===
+                    String(userId);
 
-                        {/* PROFILE */}
+                  const currentLikeCount =
+                    Number(
+                      item.likeCount ??
+                        item.likes?.length ??
+                        0
+                    );
 
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gray-200">
-                          {item.viewer?.image ? (
-                            <img
-                              src={
-                                item.viewer
-                                  .image
-                              }
-                              alt={
-                                item.viewer
-                                  .name ||
-                                "User"
-                              }
-                              className="h-full w-full object-cover"
-                            />
-                          ) : (
-                            <UserCircle
-                              size={25}
-                            />
-                          )}
+                  const currentDislikeCount =
+                    Number(
+                      item.dislikeCount ??
+                        item.dislikes?.length ??
+                        0
+                    );
+
+                  const currentUserLiked =
+                    (item.likes || []).some(
+                      (id) =>
+                        String(id) ===
+                        String(userId)
+                    );
+
+                  const currentUserDisliked =
+                    (
+                      item.dislikes ||
+                      []
+                    ).some(
+                      (id) =>
+                        String(id) ===
+                        String(userId)
+                    );
+
+                  return (
+                    <div
+                      key={item._id}
+                      className="flex gap-3"
+                    >
+
+                      {/* PROFILE */}
+
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gray-200">
+
+                        {item.viewer?.image ? (
+                          <img
+                            src={
+                              item.viewer.image
+                            }
+                            alt={
+                              item.viewer.name ||
+                              "User"
+                            }
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <UserCircle
+                            size={25}
+                          />
+                        )}
+
+                      </div>
+
+                      {/* COMMENT */}
+
+                      <div className="min-w-0 flex-1">
+
+                        <div className="flex flex-wrap items-center gap-2">
+
+                          <p className="font-semibold">
+                            {item.viewer?.name ||
+                              item.viewer?.email ||
+                              "User"}
+                          </p>
+
+                          <span className="text-xs text-gray-400">
+                            {item.createdAt
+                              ? new Date(
+                                  item.createdAt
+                                ).toLocaleDateString()
+                              : ""}
+                          </span>
+
                         </div>
 
-                        {/* COMMENT CONTENT */}
+                        <p className="mt-1 whitespace-pre-wrap text-sm text-gray-700">
+                          {item.comment}
+                        </p>
 
-                        <div className="min-w-0 flex-1">
+                        {/* COMMENT ACTIONS */}
 
-                          <div className="flex flex-wrap items-center gap-2">
+                        <div className="mt-2 flex items-center gap-3">
 
-                            <p className="font-semibold">
-                              {item.viewer
-                                ?.name ||
-                                item.viewer
-                                  ?.email ||
-                                "User"}
-                            </p>
+                          {/* LIKE */}
 
-                            <span className="text-xs text-gray-400">
-                              {item.createdAt
-                                ? new Date(
-                                    item.createdAt
-                                  ).toLocaleDateString()
-                                : ""}
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleCommentLike(
+                                item._id
+                              )
+                            }
+                            disabled={
+                              commentLikeLoading ===
+                              item._id
+                            }
+                            className={`flex items-center gap-1 rounded-full px-2 py-1 transition ${
+                              currentUserLiked
+                                ? "bg-black text-white"
+                                : "text-gray-600 hover:bg-gray-100 hover:text-black"
+                            }`}
+                          >
+                            <ThumbsUp
+                              size={16}
+                            />
+
+                            <span className="text-xs">
+                              {
+                                currentLikeCount
+                              }
                             </span>
+                          </button>
 
-                            {item.isEdited && (
-                              <span className="text-xs text-gray-400">
-                                (edited)
-                              </span>
-                            )}
-                          </div>
+                          {/* DISLIKE */}
 
-                          <p className="mt-1 whitespace-pre-wrap text-sm text-gray-700">
-                            {item.comment}
-                          </p>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleCommentDislike(
+                                item._id
+                              )
+                            }
+                            disabled={
+                              commentDislikeLoading ===
+                              item._id
+                            }
+                            className={`flex items-center gap-1 rounded-full px-2 py-1 transition ${
+                              currentUserDisliked
+                                ? "bg-black text-white"
+                                : "text-gray-600 hover:bg-gray-100 hover:text-black"
+                            }`}
+                          >
+                            <ThumbsDown
+                              size={16}
+                            />
+
+                            <span className="text-xs">
+                              {
+                                currentDislikeCount
+                              }
+                            </span>
+                          </button>
 
                           {/* DELETE */}
 
@@ -1477,30 +1771,33 @@ export default function WatchPage() {
                                   item._id
                                 )
                               }
-                              className="mt-2 text-xs font-semibold text-gray-500 hover:text-red-500"
+                              className="text-xs font-semibold text-gray-500 hover:text-red-500"
                             >
                               Delete
                             </button>
                           )}
+
                         </div>
                       </div>
-                    );
-                  }
-                )
+                    </div>
+                  );
+                })
               )}
+
             </div>
           </section>
         </main>
 
-        {/* =================================================
+        {/* ==================================================
             RECOMMENDED VIDEOS
-        ================================================= */}
+        ================================================== */}
 
         <aside className="hidden w-[360px] shrink-0 lg:block">
           <div className="space-y-4">
 
             {recommended.map(
               (item) => {
+
                 const itemUrl =
                   getVideoUrl(
                     item.filepath
@@ -1512,8 +1809,6 @@ export default function WatchPage() {
                     href={`/watch/${item._id}`}
                     className="flex gap-3"
                   >
-
-                    {/* VIDEO */}
 
                     <div className="w-[160px] shrink-0 overflow-hidden rounded-lg bg-black">
 
@@ -1536,9 +1831,8 @@ export default function WatchPage() {
                           Video
                         </div>
                       )}
-                    </div>
 
-                    {/* DETAILS */}
+                    </div>
 
                     <div className="min-w-0">
 
@@ -1559,13 +1853,16 @@ export default function WatchPage() {
                         ).toLocaleString()}{" "}
                         views
                       </p>
+
                     </div>
                   </Link>
                 );
               }
             )}
+
           </div>
         </aside>
+
       </div>
     </div>
   );
