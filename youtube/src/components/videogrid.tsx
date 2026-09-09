@@ -25,6 +25,11 @@ type VideoResponse = {
   videos?: Video[];
 };
 
+const API_URL =
+  process.env.NEXT_PUBLIC_API_URL ||
+  process.env.NEXT_PUBLIC_BACKEND_URL ||
+  "http://localhost:5000";
+
 export default function VideoGrid() {
   const [videos, setVideos] = useState<Video[]>([]);
   const [loading, setLoading] = useState(true);
@@ -36,18 +41,10 @@ export default function VideoGrid() {
         setLoading(true);
         setError("");
 
-        // ==========================================
-        // PRODUCTION BACKEND URL
-        // ==========================================
-
-        const API_URL =
-          process.env.NEXT_PUBLIC_API_URL ||
-          "https://youtube-hiv1.onrender.com";
-
         console.log("Backend URL:", API_URL);
 
         const response = await fetch(
-          `${API_URL}/video/getall`,
+          `${API_URL.replace(/\/$/, "")}/video/getall`,
           {
             method: "GET",
             headers: {
@@ -68,16 +65,19 @@ export default function VideoGrid() {
 
         console.log("Videos from backend:", data);
 
-        if (Array.isArray(data.videos)) {
+        if (data.success !== false && Array.isArray(data.videos)) {
           setVideos(data.videos);
         } else {
-          setVideos([]);
-          throw new Error("Backend did not return videos array");
+          throw new Error(
+            "The backend returned an invalid video response."
+          );
         }
       } catch (err) {
-        console.error("Error loading videos:", err);
+        console.warn("Error loading videos:", err);
 
-        setError("Unable to load videos.");
+        setError(
+          "Unable to load videos. Please start the backend server and refresh."
+        );
         setVideos([]);
       } finally {
         setLoading(false);
@@ -139,10 +139,6 @@ export default function VideoGrid() {
         // ======================================
         // BACKEND URL
         // ======================================
-
-        const API_URL =
-          process.env.NEXT_PUBLIC_API_URL ||
-          "https://youtube-hiv1.onrender.com";
 
         // ======================================
         // CLEAN FILE PATH
