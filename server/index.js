@@ -5,50 +5,30 @@ import mongoose from "mongoose";
 import path from "path";
 import { fileURLToPath } from "url";
 
-// ==========================================
-// ROUTES
-// ==========================================
-
 import authRoutes from "./routes/auth.js";
 import videoRoutes from "./routes/video.js";
 import likeRoutes from "./routes/like.js";
 import watchLaterRoutes from "./routes/watchlater.js";
 import historyRoutes from "./routes/history.js";
 import commentRoutes from "./routes/comment.js";
-
-// ==========================================
-// ENV
-// ==========================================
+import adminCommentsRoutes from "./routes/adminComments.js";
 
 dotenv.config();
 
-// ==========================================
-// APP
-// ==========================================
-
 const app = express();
-
-// ==========================================
-// __dirname
-// ==========================================
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// ==========================================
-// CORS
-// ==========================================
-
 const allowedOrigins = [
   "http://localhost:3000",
-  "https://youtube-bite-rho.vercel.app",
+  "http://localhost:3001",
+  "https://youtube-bice-rho.vercel.app",
 ];
 
 app.use(
   cors({
     origin: function (origin, callback) {
-      // Allow requests without an origin
-      // such as Postman or direct server requests
       if (!origin) {
         return callback(null, true);
       }
@@ -67,25 +47,17 @@ app.use(
   })
 );
 
-// ==========================================
-// MIDDLEWARE
-// ==========================================
-
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-
-// ==========================================
-// STATIC UPLOADS
-// ==========================================
 
 app.use(
   "/uploads",
   express.static(path.join(__dirname, "uploads"))
 );
-
-// ==========================================
-// TEST ROUTE
-// ==========================================
+app.use(
+  "/admin/comments",
+  adminCommentsRoutes
+);
 
 app.get("/", (req, res) => {
   res.json({
@@ -94,10 +66,6 @@ app.get("/", (req, res) => {
   });
 });
 
-// ==========================================
-// TEST API
-// ==========================================
-
 app.get("/api/test", (req, res) => {
   res.json({
     success: true,
@@ -105,45 +73,12 @@ app.get("/api/test", (req, res) => {
   });
 });
 
-// ==========================================
-// AUTH ROUTES
-// ==========================================
-
 app.use("/user", authRoutes);
-
-// ==========================================
-// VIDEO ROUTES
-// ==========================================
-
 app.use("/video", videoRoutes);
-
-// ==========================================
-// LIKE ROUTES
-// ==========================================
-
 app.use("/like", likeRoutes);
-
-// ==========================================
-// WATCH LATER ROUTES
-// ==========================================
-
 app.use("/watchlater", watchLaterRoutes);
-
-// ==========================================
-// HISTORY ROUTES
-// ==========================================
-
 app.use("/history", historyRoutes);
-
-// ==========================================
-// COMMENT ROUTES
-// ==========================================
-
 app.use("/comment", commentRoutes);
-
-// ==========================================
-// 404 ROUTE
-// ==========================================
 
 app.use((req, res) => {
   res.status(404).json({
@@ -151,10 +86,6 @@ app.use((req, res) => {
     message: `Route not found: ${req.method} ${req.originalUrl}`,
   });
 });
-
-// ==========================================
-// ERROR HANDLER
-// ==========================================
 
 app.use((error, req, res, next) => {
   console.error("Server error:", error);
@@ -166,12 +97,7 @@ app.use((error, req, res, next) => {
   });
 });
 
-// ==========================================
-// MONGODB
-// ==========================================
-
 const PORT = process.env.PORT || 5000;
-
 const DB_URL = process.env.DB_URL;
 
 if (!DB_URL) {
@@ -189,5 +115,8 @@ mongoose
     });
   })
   .catch((error) => {
-    console.error("MongoDB connection error:", error);
+    console.error(
+      "MongoDB connection error:",
+      error
+    );
   });
