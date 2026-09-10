@@ -14,6 +14,7 @@ import {
   History,
   ThumbsUp,
   Clock,
+  Download,
   LogOut,
 } from "lucide-react";
 
@@ -134,15 +135,12 @@ const Header = () => {
     try {
       setMenuOpen(false);
 
-      // REAL AUTH LOGOUT
       await logout();
 
-      // Remove local channel data
       localStorage.removeItem(
         "yourTubeChannel"
       );
 
-      // Go home
       router.push("/");
     } catch (error) {
       console.error(
@@ -315,7 +313,6 @@ const Header = () => {
                     {displayEmail}
                   </p>
 
-                  {/* DEBUG USER ID */}
                   {user?._id && (
                     <p className="mt-1 break-all text-[10px] text-gray-400">
                       ID: {user._id}
@@ -418,6 +415,44 @@ const Header = () => {
 
                   <span>
                     Watch later
+                  </span>
+                </Link>
+
+                {/* ====================================== */}
+                {/* SUBSCRIPTION */}
+                {/* ====================================== */}
+
+                <Link
+                  href="/subscriptions"
+                  onClick={() =>
+                    setMenuOpen(false)
+                  }
+                  className="flex items-center gap-3 px-4 py-3 text-sm text-black hover:bg-gray-100"
+                >
+                  <span className="text-lg">
+                    💳
+                  </span>
+
+                  <span>
+                    Subscription
+                  </span>
+                </Link>
+
+                {/* ====================================== */}
+                {/* DOWNLOADS */}
+                {/* ====================================== */}
+
+                <Link
+                  href="/downloads"
+                  onClick={() =>
+                    setMenuOpen(false)
+                  }
+                  className="flex items-center gap-3 px-4 py-3 text-sm text-black hover:bg-gray-100"
+                >
+                  <Download className="h-5 w-5" />
+
+                  <span>
+                    Downloads
                   </span>
                 </Link>
 

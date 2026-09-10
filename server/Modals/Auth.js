@@ -2,24 +2,16 @@ import mongoose from "mongoose";
 
 const userSchema = new mongoose.Schema(
   {
-    email: {
+    // Your existing user fields
+    name: {
       type: String,
       required: true,
     },
 
-    name: {
+    email: {
       type: String,
-      default: "",
-    },
-
-    Channelname: {
-      type: String,
-      default: "",
-    },
-
-    description: {
-      type: String,
-      default: "",
+      required: true,
+      unique: true,
     },
 
     image: {
@@ -27,16 +19,41 @@ const userSchema = new mongoose.Schema(
       default: "",
     },
 
-    location: {
-      type: String,
-      default: "",
-    },
+    // ==================================================
+    // YOUR EXISTING JOIN DATE
+    // ==================================================
 
-    joindeon: {
+    joindate: {
       type: Date,
       default: Date.now,
     },
+
+    // ==================================================
+    // SUBSCRIPTION
+    // ==================================================
+
+    subscriptionPlan: {
+      type: String,
+      enum: ["Free", "Bronze", "Silver", "Gold"],
+      default: "Free",
+    },
+
+    subscriptionStatus: {
+      type: String,
+      enum: ["active", "expired", "cancelled"],
+      default: "active",
+    },
+
+    subscriptionExpiresAt: {
+      type: Date,
+      default: null,
+    },
   },
+
+  // ====================================================
+  // MONGOOSE OPTIONS
+  // ====================================================
+
   {
     timestamps: true,
   }

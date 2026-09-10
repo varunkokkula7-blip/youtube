@@ -12,6 +12,8 @@ import watchLaterRoutes from "./routes/watchlater.js";
 import historyRoutes from "./routes/history.js";
 import commentRoutes from "./routes/comment.js";
 import adminCommentsRoutes from "./routes/adminComments.js";
+import downloadRoutes from "./routes/download.js";
+import subscriptionRoutes from "./routes/subscription.js";
 
 dotenv.config();
 
@@ -58,7 +60,8 @@ app.use(
   "/admin/comments",
   adminCommentsRoutes
 );
-
+app.use("/download", downloadRoutes);
+app.use("/subscription", subscriptionRoutes);
 app.get("/", (req, res) => {
   res.json({
     success: true,
