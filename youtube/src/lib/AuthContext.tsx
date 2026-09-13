@@ -2,6 +2,7 @@
 
 import {
   onAuthStateChanged,
+  getRedirectResult,
   signInWithPopup,
   signInWithRedirect,
   signOut,
@@ -514,6 +515,35 @@ export const UserProvider = ({
   // ==========================================
 
   useEffect(() => {
+    const processRedirectSignIn = async () => {
+      try {
+        await getRedirectResult(auth);
+      } catch (error: any) {
+        console.error(
+          "Google redirect result error:",
+          error
+        );
+
+        if (
+          error?.code ===
+          "auth/unauthorized-domain"
+        ) {
+          console.error(
+            "Add the current Vercel hostname to Firebase Authorized domains."
+          );
+        } else if (
+          error?.code ===
+          "auth/invalid-action-code"
+        ) {
+          window.alert(
+            "This Google sign-in request expired. Please click Sign In again."
+          );
+        }
+      }
+    };
+
+    void processRedirectSignIn();
+
     // Restore saved user
     if (typeof window !== "undefined") {
       const savedUser =
