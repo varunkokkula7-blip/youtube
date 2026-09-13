@@ -230,6 +230,7 @@ export const UserProvider = ({
 
   const signingIn = useRef(false);
   const backendLoginInProgress = useRef(false);
+  const redirectResultProcessed = useRef(false);
 
   const applyTheme = (nextTheme: "light" | "dark") => {
     document.documentElement.classList.toggle(
@@ -565,7 +566,43 @@ export const UserProvider = ({
   useEffect(() => {
     const processRedirectSignIn = async () => {
       try {
-        await getRedirectResult(auth);
+        const redirectResult = await getRedirectResult(auth);
+
+        // Some deployed browsers resolve the redirect result without
+        // emitting a second auth-state event. Complete backend login here.
+        if (redirectResult?.user) {
+          redirectResultProcessed.current = true;
+          const firebaseUser = redirectResult.user;
+          const email = firebaseUser.email || "";
+          const name = firebaseUser.displayName || "";
+          const image =
+            firebaseUser.photoURL ||
+            "https://github.com/shadcn.png";
+
+          backendLoginInProgress.current = true;
+          const deviceToken = localStorage.getItem(
+            getDeviceTokenKey(email)
+          ) || "";
+          const backendLogin = await loginToBackend(
+            email,
+            name,
+            image,
+            deviceToken
+          );
+
+          if (backendLogin?.otpRequired) {
+            setOtpError("");
+            setOtpState({
+              required: true,
+              email: backendLogin.email || email,
+              challengeToken: backendLogin.challengeToken || "",
+            });
+          } else if (backendLogin?.user) {
+            login(backendLogin.user);
+          } else if (backendLogin?.error) {
+            window.alert(backendLogin.error);
+          }
+        }
       } catch (error: any) {
         console.error(
           "Google redirect result error:",
@@ -587,6 +624,8 @@ export const UserProvider = ({
             "This Google sign-in request expired. Please click Sign In again."
           );
         }
+      } finally {
+        backendLoginInProgress.current = false;
       }
     };
 
@@ -647,6 +686,11 @@ export const UserProvider = ({
               "https://github.com/shadcn.png";
 
             if (backendLoginInProgress.current) {
+              return;
+            }
+
+            if (redirectResultProcessed.current) {
+              redirectResultProcessed.current = false;
               return;
             }
 
