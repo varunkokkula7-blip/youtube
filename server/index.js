@@ -31,11 +31,17 @@ const allowedOrigins = [
   "http://localhost:3000",
   "http://localhost:3001",
   "https://youtube-bice-rho.vercel.app",
+  "https://youtube-nhugzw6d7-varun-a3ec.vercel.app",
 ];
+
+const isAllowedOrigin = (origin) =>
+  !origin ||
+  allowedOrigins.includes(origin) ||
+  /^https:\/\/[a-z0-9-]+\.vercel\.app$/i.test(origin);
 
 const io = new SocketIOServer(httpServer, {
   cors: {
-    origin: allowedOrigins,
+    origin: isAllowedOrigin,
     credentials: true,
   },
 });
@@ -49,7 +55,7 @@ app.use(
         return callback(null, true);
       }
 
-      if (allowedOrigins.includes(origin)) {
+      if (isAllowedOrigin(origin)) {
         return callback(null, true);
       }
 

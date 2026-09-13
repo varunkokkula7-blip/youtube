@@ -5,7 +5,7 @@ import Script from "next/script";
 
 const BACKEND_URL =
   process.env.NEXT_PUBLIC_API_URL ||
-  "http://localhost:5000";
+  "https://youtube-hiv1.onrender.com";
 
 const RAZORPAY_KEY_ID =
   process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || "";

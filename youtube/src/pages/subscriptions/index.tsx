@@ -12,7 +12,7 @@ declare global {
 const BACKEND_URL =
   process.env.NEXT_PUBLIC_API_URL ||
   process.env.NEXT_PUBLIC_BACKEND_URL ||
-  "http://localhost:5000";
+  "https://youtube-hiv1.onrender.com";
 
 type PlanName = "Free" | "Bronze" | "Silver" | "Gold";
 

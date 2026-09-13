@@ -5,7 +5,7 @@ import { useUser } from "@/lib/AuthContext";
 
 const BACKEND_URL =
   process.env.NEXT_PUBLIC_API_URL ||
-  "http://localhost:5000";
+  "https://youtube-hiv1.onrender.com";
 
 export default function TransactionsPage() {
   const { user } = useUser();
