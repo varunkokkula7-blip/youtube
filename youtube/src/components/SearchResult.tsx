@@ -28,6 +28,11 @@ type SearchResultProps = {
   query: string;
 };
 
+const BACKEND_URL =
+  process.env.NEXT_PUBLIC_API_URL ||
+  process.env.NEXT_PUBLIC_BACKEND_URL ||
+  "http://localhost:5000";
+
 const SearchResult = ({
   query,
 }: SearchResultProps) => {
@@ -45,7 +50,7 @@ const SearchResult = ({
         setLoading(true);
 
         const response = await fetch(
-          "http://localhost:5000/video/getall"
+          `${BACKEND_URL.replace(/\/$/, "")}/video/getall`
         );
 
         if (!response.ok) {
@@ -180,7 +185,7 @@ const SearchResult = ({
                 "http"
               )
                 ? video.filepath
-                : `http://localhost:5000/uploads/${encodeURI(
+                : `${BACKEND_URL.replace(/\/$/, "")}/uploads/${encodeURI(
                     cleanPath || ""
                   )}`;
 

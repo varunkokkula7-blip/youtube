@@ -1,6 +1,9 @@
 import express from "express";
 
-import { login } from "../controllers/auth.js";
+import {
+  login,
+  verifyOTP,
+} from "../controllers/auth.js";
 import User from "../Modals/Auth.js";
 
 const routes = express.Router();
@@ -9,6 +12,7 @@ const routes = express.Router();
 // LOGIN
 // ===============================
 routes.post("/login", login);
+routes.post("/verify-otp", verifyOTP);
 
 // ===============================
 // SEARCH USERS FOR @MENTIONS

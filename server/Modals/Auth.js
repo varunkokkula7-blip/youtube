@@ -2,7 +2,10 @@ import mongoose from "mongoose";
 
 const userSchema = new mongoose.Schema(
   {
-    // Your existing user fields
+    // ==================================================
+    // USER INFORMATION
+    // ==================================================
+
     name: {
       type: String,
       required: true,
@@ -20,7 +23,7 @@ const userSchema = new mongoose.Schema(
     },
 
     // ==================================================
-    // YOUR EXISTING JOIN DATE
+    // JOIN DATE
     // ==================================================
 
     joindate: {
@@ -48,11 +51,17 @@ const userSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
-  },
 
-  // ====================================================
-  // MONGOOSE OPTIONS
-  // ====================================================
+    // ==================================================
+    // THEME PREFERENCE
+    // ==================================================
+
+    themePreference: {
+      type: String,
+      enum: ["light", "dark", null],
+      default: null,
+    },
+  },
 
   {
     timestamps: true,

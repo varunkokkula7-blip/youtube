@@ -30,6 +30,11 @@ type CommentsProps = {
   user?: Viewer | null;
 };
 
+const BACKEND_URL =
+  process.env.NEXT_PUBLIC_API_URL ||
+  process.env.NEXT_PUBLIC_BACKEND_URL ||
+  "http://localhost:5000";
+
 const Comments = ({
   videoId,
   user,
@@ -62,7 +67,7 @@ const Comments = ({
       setError("");
 
       const response = await fetch(
-        `http://localhost:5000/comment/${videoId}`
+        `${BACKEND_URL.replace(/\/$/, "")}/comment/${videoId}`
       );
 
       if (!response.ok) {
@@ -123,7 +128,7 @@ const Comments = ({
       setIsSubmitting(true);
 
       const response = await fetch(
-        `http://localhost:5000/comment/${videoId}`,
+        `${BACKEND_URL.replace(/\/$/, "")}/comment/${videoId}`,
         {
           method: "POST",
 
@@ -175,7 +180,7 @@ const Comments = ({
   ) => {
     try {
       const response = await fetch(
-        `http://localhost:5000/comment/${commentId}`,
+        `${BACKEND_URL.replace(/\/$/, "")}/comment/${commentId}`,
         {
           method: "DELETE",
         }

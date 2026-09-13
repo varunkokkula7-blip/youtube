@@ -36,7 +36,10 @@ type ApiResponse = {
   data?: HistoryItem[];
 };
 
-const BACKEND_URL = "http://localhost:5000";
+const BACKEND_URL =
+  process.env.NEXT_PUBLIC_API_URL ||
+  process.env.NEXT_PUBLIC_BACKEND_URL ||
+  "http://localhost:5000";
 
 function getVideoUrl(filepath?: string) {
   if (!filepath) return "";
@@ -140,7 +143,7 @@ export default function HistoryContent() {
           No watch history yet
         </h2>
 
-        <p className="text-gray-600">
+        <p className="text-muted-foreground">
           Videos you watch will appear here.
         </p>
       </div>
@@ -154,7 +157,7 @@ export default function HistoryContent() {
           Watch history
         </h1>
 
-        <p className="mt-1 text-sm text-gray-500">
+        <p className="mt-1 text-sm text-muted-foreground">
           {history.length}{" "}
           {history.length === 1
             ? "video"
@@ -219,15 +222,15 @@ export default function HistoryContent() {
                   </h2>
                 </Link>
 
-                <p className="mt-2 text-sm text-gray-600">
+                <p className="mt-2 text-sm text-muted-foreground">
                   {channel}
                 </p>
 
-                <p className="mt-1 text-sm text-gray-600">
+                <p className="mt-1 text-sm text-muted-foreground">
                   {(video.views || 0).toLocaleString()} views
                 </p>
 
-                <p className="text-sm text-gray-600">
+                <p className="text-sm text-muted-foreground">
                   {video.createdAt
                     ? formatDistanceToNow(
                         new Date(
@@ -240,7 +243,7 @@ export default function HistoryContent() {
                     : "Recently"}
                 </p>
 
-                <p className="mt-2 text-xs text-gray-500">
+                <p className="mt-2 text-xs text-muted-foreground">
                   Watched{" "}
                   {formatDistanceToNow(
                     new Date(item.createdAt),

@@ -176,7 +176,7 @@ export default function VideoGrid() {
             href={`/watch/${video._id}`}
             className="block"
           >
-            <div className="overflow-hidden rounded-xl bg-white shadow-md transition hover:shadow-lg">
+            <div className="overflow-hidden rounded-xl bg-card text-card-foreground shadow-md transition hover:shadow-lg">
 
               {/* ==================================
                   VIDEO PREVIEW
@@ -213,18 +213,18 @@ export default function VideoGrid() {
               ================================== */}
 
               <div className="p-3">
-                <h3 className="line-clamp-2 text-lg font-semibold text-black">
+                <h3 className="line-clamp-2 text-lg font-semibold">
                   {video.videotitle ||
                     "Untitled video"}
                 </h3>
 
-                <p className="mt-1 text-sm text-gray-500">
+                <p className="mt-1 text-sm text-muted-foreground">
                   {video.videochanel ||
                     video.videochannel ||
                     "Tech Channel"}
                 </p>
 
-                <p className="mt-1 text-sm text-gray-500">
+                <p className="mt-1 text-sm text-muted-foreground">
                   {(video.views || 0).toLocaleString()}{" "}
                   views
                 </p>

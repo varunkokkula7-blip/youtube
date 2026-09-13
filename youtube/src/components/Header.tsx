@@ -16,6 +16,8 @@ import {
   Clock,
   Download,
   LogOut,
+  Moon,
+  Sun,
 } from "lucide-react";
 
 import Channeldialogue from "./channeldialogue";
@@ -34,7 +36,12 @@ const Header = () => {
   // AUTH USER
   // ==========================================
 
-  const { user, logout } = useUser();
+  const {
+    user,
+    logout,
+    theme,
+    setTheme,
+  } = useUser();
 
   // ==========================================
   // STATES
@@ -455,6 +462,34 @@ const Header = () => {
                     Downloads
                   </span>
                 </Link>
+
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      await setTheme(
+                        theme === "dark" ? "light" : "dark"
+                      );
+                    } catch (error) {
+                      console.error(
+                        "Theme change error:",
+                        error
+                      );
+                    }
+                  }}
+                  className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-black hover:bg-gray-100"
+                >
+                  {theme === "dark" ? (
+                    <Sun className="h-5 w-5" />
+                  ) : (
+                    <Moon className="h-5 w-5" />
+                  )}
+                  <span>
+                    {theme === "dark"
+                      ? "Light theme"
+                      : "Dark theme"}
+                  </span>
+                </button>
 
                 <div className="my-1 border-t" />
 

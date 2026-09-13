@@ -1,11 +1,14 @@
-import Head from "next/head";
 import type { AppProps } from "next/app";
+import Head from "next/head";
 
-import Header from "../components/Header";
-import Sidebar from "../components/Sidebar";
-import { UserProvider } from "../lib/AuthContext";
+import { UserProvider } from "@/lib/AuthContext";
 
-import "../styles/globals.css";
+import Header from "@/components/Header";
+import Sidebar from "@/components/Sidebar";
+
+import OTPVerification from "@/components/OTPVerfication";
+
+import "@/styles/globals.css";
 
 export default function App({
   Component,
@@ -13,25 +16,32 @@ export default function App({
 }: AppProps) {
   return (
     <UserProvider>
+
       <Head>
-        <title>Your-Tube Clone</title>
+        <title>
+          Your-Tube Clone
+        </title>
+
         <meta
           name="description"
           content="Your-Tube - A YouTube clone"
         />
       </Head>
 
-      <div className="min-h-screen bg-white text-black">
-        <Header />
+      <Header />
 
-        <div className="flex">
-          <Sidebar />
+      <div className="flex items-start">
+        <Sidebar />
 
-          <main className="min-h-screen flex-1">
-            <Component {...pageProps} />
-          </main>
-        </div>
+        <main className="min-w-0 flex-1">
+          <Component
+            {...pageProps}
+          />
+        </main>
       </div>
+
+      <OTPVerification />
+
     </UserProvider>
   );
 }

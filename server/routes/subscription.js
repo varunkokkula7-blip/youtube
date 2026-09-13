@@ -1,16 +1,26 @@
 import express from "express";
 
 import {
+  getPlans,
   getSubscription,
-  changeSubscription,
+  createOrder,
+  verifyPayment,
+  cancelSubscription,
+  getTransactions,
 } from "../controllers/subscription.js";
 
 const router = express.Router();
 
-// Get user's current subscription
-router.get("/:userId", getSubscription);
+router.get("/plans", getPlans);
 
-// Change user's subscription
-router.put("/:userId", changeSubscription);
+router.get("/user/:userId", getSubscription);
+
+router.post("/create-order", createOrder);
+
+router.post("/verify-payment", verifyPayment);
+
+router.post("/cancel", cancelSubscription);
+
+router.get("/transactions/:userId", getTransactions);
 
 export default router;

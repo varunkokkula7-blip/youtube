@@ -413,15 +413,60 @@ router.post("/translate", async (req, res) => {
       });
     }
 
-    // --------------------------------------------------
-    // IMPORTANT:
-    // Keep the translation service/code that you already
-    // had here if you are using an external translation API.
-    // --------------------------------------------------
+    const translationUrl =
+      "https://translate.googleapis.com/translate_a/single" +
+      `?client=gtx&sl=auto&tl=${encodeURIComponent(targetLanguage)}` +
+      `&dt=t&q=${encodeURIComponent(text.trim())}`;
+
+    let translatedText = "";
+
+    try {
+      const translationResponse = await fetch(translationUrl);
+
+      if (translationResponse.ok) {
+        const translationData = await translationResponse.json();
+        translatedText = Array.isArray(translationData?.[0])
+          ? translationData[0]
+              .filter(
+                (part) =>
+                  Array.isArray(part) &&
+                  typeof part[0] === "string"
+              )
+              .map((part) => part[0])
+              .join("")
+              .trim()
+          : "";
+      }
+    } catch (error) {
+      console.warn("Primary translation service unavailable:", error.message);
+    }
+
+    if (!translatedText) {
+      const fallbackUrl =
+        "https://api.mymemory.translated.net/get" +
+        `?q=${encodeURIComponent(text.trim())}` +
+        `&langpair=${encodeURIComponent(
+          `${sourceLanguage && sourceLanguage !== "auto" ? sourceLanguage : "en"}|${targetLanguage}`
+        )}`;
+
+      const fallbackResponse = await fetch(fallbackUrl);
+
+      if (fallbackResponse.ok) {
+        const fallbackData = await fallbackResponse.json();
+        translatedText =
+          typeof fallbackData?.responseData?.translatedText === "string"
+            ? fallbackData.responseData.translatedText.trim()
+            : "";
+      }
+    }
+
+    if (!translatedText) {
+      throw new Error("No translation was returned by the available services.");
+    }
 
     return res.json({
       success: true,
-      translatedText: text,
+      translatedText,
     });
   } catch (error) {
     console.error(

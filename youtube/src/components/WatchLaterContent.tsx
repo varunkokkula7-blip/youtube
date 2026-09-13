@@ -32,7 +32,10 @@ type ApiResponse = {
   data?: WatchLaterItem[];
 };
 
-const BACKEND_URL = "http://localhost:5000";
+const BACKEND_URL =
+  process.env.NEXT_PUBLIC_API_URL ||
+  process.env.NEXT_PUBLIC_BACKEND_URL ||
+  "http://localhost:5000";
 
 function getVideoUrl(filepath?: string) {
   if (!filepath) return "";
@@ -147,7 +150,7 @@ export default function WatchLaterContent() {
           No videos saved
         </h2>
 
-        <p className="text-gray-600">
+        <p className="text-muted-foreground">
           Videos you save for later will
           appear here.
         </p>
@@ -165,7 +168,7 @@ export default function WatchLaterContent() {
             Watch later
           </h1>
 
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-muted-foreground">
             {videos.length}{" "}
             {videos.length === 1
               ? "video"
@@ -231,11 +234,11 @@ export default function WatchLaterContent() {
                   </h2>
                 </Link>
 
-                <p className="mt-2 text-sm text-gray-600">
+                <p className="mt-2 text-sm text-muted-foreground">
                   {channel}
                 </p>
 
-                <p className="mt-1 text-sm text-gray-600">
+                <p className="mt-1 text-sm text-muted-foreground">
                   {(video.views || 0).toLocaleString()} views
                 </p>
               </div>

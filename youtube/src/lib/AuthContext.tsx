@@ -3,6 +3,7 @@
 import {
   onAuthStateChanged,
   signInWithPopup,
+  signInWithRedirect,
   signOut,
 } from "firebase/auth";
 
@@ -29,6 +30,30 @@ export type User = {
   image?: string;
   channelname?: string;
   Channelname?: string;
+  themePreference?: "light" | "dark" | null;
+};
+
+type OTPState = {
+  required: boolean;
+  email: string;
+  challengeToken: string;
+};
+
+const getDeviceTokenKey = (email: string) =>
+  `trustedDeviceToken:${email.trim().toLowerCase()}`;
+
+const getAutomaticTheme = (): "light" | "dark" => {
+  const hour = Number(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: "Asia/Kolkata",
+      hour: "numeric",
+      hour12: false,
+    })
+      .formatToParts(new Date())
+      .find((part) => part.type === "hour")?.value || 0
+  );
+
+  return hour >= 6 && hour < 18 ? "light" : "dark";
 };
 
 // ==========================================
@@ -40,6 +65,13 @@ type AuthContextType = {
   login: (userdata: User) => void;
   logout: () => Promise<void>;
   handlegooglesignin: () => Promise<void>;
+  otpState: OTPState | null;
+  otpLoading: boolean;
+  otpError: string;
+  verifyLoginOTP: (otp: string) => Promise<boolean>;
+  cancelOTP: () => void;
+  theme: "light" | "dark";
+  setTheme: (theme: "light" | "dark") => Promise<void>;
 };
 
 // ==========================================
@@ -53,14 +85,25 @@ const UserContext =
 // BACKEND LOGIN
 // ==========================================
 
+const API_URL =
+  process.env.NEXT_PUBLIC_API_URL ||
+  process.env.NEXT_PUBLIC_BACKEND_URL ||
+  "http://localhost:5000";
+
 const loginToBackend = async (
   email: string,
   name: string,
-  image: string
-): Promise<User | null> => {
+  image: string,
+  deviceToken: string
+): Promise<{
+  user?: User;
+  otpRequired: boolean;
+  email?: string;
+  challengeToken?: string;
+} | null> => {
   try {
     const response = await fetch(
-      "http://localhost:5000/user/login",
+      `${API_URL}/user/login`,
       {
         method: "POST",
         headers: {
@@ -70,6 +113,7 @@ const loginToBackend = async (
           email,
           name,
           image,
+          deviceToken,
         }),
       }
     );
@@ -89,7 +133,7 @@ const loginToBackend = async (
 
     const data = JSON.parse(text);
 
-    if (!data?.result) {
+    if (!data?.result && !data?.otpRequired) {
       console.error(
         "Backend did not return result:",
         data
@@ -98,31 +142,29 @@ const loginToBackend = async (
       return null;
     }
 
-    const backendUser: User = {
-      _id: data.result._id
-        ? String(data.result._id)
-        : undefined,
-
-      id: data.result._id
-        ? String(data.result._id)
-        : undefined,
-
-      name: data.result.name || name || "",
-
-      email: data.result.email || email || "",
-
-      image: data.result.image || image || "",
-
-      channelname:
-        data.result.channelname ||
-        data.result.Channelname ||
-        "",
-
-      Channelname:
-        data.result.Channelname ||
-        data.result.channelname ||
-        "",
-    };
+    const backendUser: User = data.result
+      ? {
+          _id: data.result._id
+            ? String(data.result._id)
+            : undefined,
+          id: data.result._id
+            ? String(data.result._id)
+            : undefined,
+          name: data.result.name || name || "",
+          email: data.result.email || email || "",
+          image: data.result.image || image || "",
+          channelname:
+            data.result.channelname ||
+            data.result.Channelname ||
+            "",
+          Channelname:
+            data.result.Channelname ||
+            data.result.channelname ||
+            "",
+          themePreference:
+            data.result.themePreference || null,
+        }
+      : {};
 
     console.log(
       "Final logged-in user:",
@@ -134,7 +176,12 @@ const loginToBackend = async (
       backendUser._id
     );
 
-    return backendUser;
+    return {
+      user: data.result ? backendUser : undefined,
+      otpRequired: data.otpRequired === true,
+      email: data.email,
+      challengeToken: data.challengeToken,
+    };
   } catch (error) {
     console.error(
       "Backend login error:",
@@ -156,8 +203,25 @@ export const UserProvider = ({
 }) => {
   const [user, setUser] =
     useState<User | null>(null);
+  const [otpState, setOtpState] =
+    useState<OTPState | null>(null);
+  const [otpLoading, setOtpLoading] =
+    useState(false);
+  const [otpError, setOtpError] =
+    useState("");
+  const [theme, setThemeState] =
+    useState<"light" | "dark">("light");
 
   const signingIn = useRef(false);
+  const backendLoginInProgress = useRef(false);
+
+  const applyTheme = (nextTheme: "light" | "dark") => {
+    document.documentElement.classList.toggle(
+      "dark",
+      nextTheme === "dark"
+    );
+    setThemeState(nextTheme);
+  };
 
   // ==========================================
   // LOGIN
@@ -175,6 +239,7 @@ export const UserProvider = ({
     );
 
     setUser(userdata);
+    applyTheme(userdata.themePreference || getAutomaticTheme());
 
     if (typeof window !== "undefined") {
       localStorage.setItem(
@@ -215,15 +280,29 @@ export const UserProvider = ({
         firebaseUser.photoURL ||
         "https://github.com/shadcn.png";
 
-      const backendUser =
+      backendLoginInProgress.current = true;
+      const deviceToken =
+        localStorage.getItem(
+          getDeviceTokenKey(email)
+        ) || "";
+      const backendLogin =
         await loginToBackend(
           email,
           name,
-          image
+          image,
+          deviceToken
         );
 
-      if (backendUser) {
-        login(backendUser);
+      if (backendLogin?.otpRequired) {
+        setOtpError("");
+        setOtpState({
+          required: true,
+          email: backendLogin.email || email,
+          challengeToken:
+            backendLogin.challengeToken || "",
+        });
+      } else if (backendLogin?.user) {
+        login(backendLogin.user);
       } else {
         console.error(
           "Backend did not create/login the user."
@@ -234,6 +313,30 @@ export const UserProvider = ({
         "Google sign in error:",
         error
       );
+
+      if (
+        error?.code ===
+        "auth/popup-blocked"
+      ) {
+        console.log(
+          "Google popup was blocked. Switching to redirect sign-in."
+        );
+        try {
+          await signInWithRedirect(
+            auth,
+            provider
+          );
+        } catch (redirectError) {
+          console.error(
+            "Google redirect sign in error:",
+            redirectError
+          );
+          window.alert(
+            "Google sign-in could not connect. Check your internet connection and try again."
+          );
+        }
+        return;
+      }
 
       if (
         error?.code ===
@@ -252,9 +355,102 @@ export const UserProvider = ({
           "Google sign-in popup was closed."
         );
       }
+
+      if (
+        error?.code ===
+        "auth/network-request-failed"
+      ) {
+        window.alert(
+          "Google sign-in could not connect. Check your internet connection and try again."
+        );
+      }
     } finally {
+      backendLoginInProgress.current = false;
       signingIn.current = false;
     }
+  };
+
+  const verifyLoginOTP = async (otp: string) => {
+    if (!otpState) return false;
+
+    setOtpLoading(true);
+    setOtpError("");
+
+    try {
+      const response = await fetch(
+        `${API_URL}/user/verify-otp`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            email: otpState.email,
+            otp,
+            challengeToken: otpState.challengeToken,
+          }),
+        }
+      );
+      const data = await response.json();
+
+      if (!response.ok || !data.success || !data.result) {
+        setOtpError(
+          data.message || "Unable to verify OTP."
+        );
+        return false;
+      }
+
+      if (data.deviceToken) {
+        localStorage.setItem(
+          getDeviceTokenKey(otpState.email),
+          data.deviceToken
+        );
+      }
+
+      login(data.result);
+      return true;
+    } catch (error) {
+      console.error("OTP verification error:", error);
+      setOtpError(
+        "Unable to verify OTP. Please try again."
+      );
+      return false;
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
+  const cancelOTP = () => {
+    setOtpState(null);
+    setOtpError("");
+  };
+
+  const setTheme = async (nextTheme: "light" | "dark") => {
+    if (!user?._id) return;
+
+    const response = await fetch(
+      `${API_URL}/security/theme/${user._id}`,
+      {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ theme: nextTheme }),
+      }
+    );
+
+    const data = await response.json();
+    if (!response.ok || !data.success) {
+      throw new Error(data.message || "Unable to change theme");
+    }
+
+    const updatedUser = {
+      ...user,
+      themePreference: nextTheme,
+    };
+    setUser(updatedUser);
+    localStorage.setItem("user", JSON.stringify(updatedUser));
+    applyTheme(nextTheme);
   };
 
   // ==========================================
@@ -302,6 +498,9 @@ export const UserProvider = ({
 
           if (parsedUser?._id) {
             setUser(parsedUser);
+            applyTheme(
+              parsedUser.themePreference || getAutomaticTheme()
+            );
 
             console.log(
               "User restored:",
@@ -339,15 +538,32 @@ export const UserProvider = ({
               firebaseUser.photoURL ||
               "https://github.com/shadcn.png";
 
-            const backendUser =
+            if (backendLoginInProgress.current) {
+              return;
+            }
+
+            const deviceToken =
+              localStorage.getItem(
+                getDeviceTokenKey(email)
+              ) || "";
+            const backendLogin =
               await loginToBackend(
                 email,
                 name,
-                image
+                image,
+                deviceToken
               );
 
-            if (backendUser) {
-              login(backendUser);
+            if (backendLogin?.otpRequired) {
+              setOtpError("");
+              setOtpState({
+                required: true,
+                email: backendLogin.email || email,
+                challengeToken:
+                  backendLogin.challengeToken || "",
+              });
+            } else if (backendLogin?.user) {
+              login(backendLogin.user);
             } else {
               console.error(
                 "Could not login user to backend."
@@ -387,6 +603,13 @@ export const UserProvider = ({
         login,
         logout,
         handlegooglesignin,
+        otpState,
+        otpLoading,
+        otpError,
+        verifyLoginOTP,
+        cancelOTP,
+        theme,
+        setTheme,
       }}
     >
       {children}

@@ -145,6 +145,42 @@ body {
   --sidebar-ring: oklch(0.556 0 0);
 }
 
+/*
+ * Keep existing utility-heavy pages readable when the persisted dark theme
+ * is active. These aliases let older light-mode surfaces follow the theme.
+ */
+.dark .bg-white {
+  background-color: var(--background);
+}
+
+.dark .bg-gray-50 {
+  background-color: var(--secondary);
+}
+
+.dark .bg-gray-100,
+.dark .bg-gray-200 {
+  background-color: var(--muted);
+}
+
+.dark .text-black {
+  color: var(--foreground);
+}
+
+.dark .text-gray-500,
+.dark .text-gray-600 {
+  color: var(--muted-foreground);
+}
+
+.dark .border-gray-200,
+.dark .border-gray-300 {
+  border-color: var(--border);
+}
+
+.dark .hover\:bg-gray-100:hover,
+.dark .hover\:bg-gray-200:hover {
+  background-color: var(--accent);
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

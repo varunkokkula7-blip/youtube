@@ -20,7 +20,11 @@ export default function VideoCard({ video }: VideoCardProps) {
   const videoUrl = video.filepath
     ? video.filepath.startsWith("http")
       ? video.filepath
-      : `http://localhost:5000/${video.filepath.replace(/^\/+/, "")}`
+      : `${(
+          process.env.NEXT_PUBLIC_API_URL ||
+          process.env.NEXT_PUBLIC_BACKEND_URL ||
+          "http://localhost:5000"
+        ).replace(/\/$/, "")}/${video.filepath.replace(/^\/+/, "")}`
     : "";
 
   return (

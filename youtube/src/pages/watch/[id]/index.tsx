@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/router";
+import CustomVideoPlayer from "@/components/CustomVideoPlayer";
 import Link from "next/link";
 
 import {
@@ -24,7 +25,7 @@ import { useUser } from "@/lib/AuthContext";
 const BACKEND_URL =
   process.env.NEXT_PUBLIC_API_URL ||
   process.env.NEXT_PUBLIC_BACKEND_URL ||
-  "https://youtube-hiv1.onrender.com";
+  "http://localhost:5000";
 
 // ======================================================
 // API URL HELPER
@@ -278,6 +279,9 @@ export default function WatchPage() {
 
   const [translationLanguage, setTranslationLanguage] =
     useState("en");
+
+  const [translationError, setTranslationError] =
+    useState("");
 
   // ====================================================
   // COMMENT LIKE LOADING
@@ -1922,6 +1926,7 @@ export default function WatchPage() {
       if (!originalText) return;
 
       setTranslatingComment(commentId);
+      setTranslationError("");
 
       // English does not need an external translation request.
       if (translationLanguage === "en") {
@@ -1932,80 +1937,41 @@ export default function WatchPage() {
         return;
       }
 
-      // First use your existing backend translation endpoint.
-      // This keeps the feature compatible with your project.
-      let backendTranslation = "";
-
-      try {
-        const response = await fetch(
-          getApiUrl("/comment/translate"),
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              text: originalText,
-              sourceLanguage: "auto",
-              targetLanguage: translationLanguage,
-            }),
-          }
-        );
-
-        const data = await response.json().catch(() => ({}));
-
-        if (response.ok && data?.success && typeof data?.translatedText === "string") {
-          backendTranslation = data.translatedText.trim();
+      const response = await fetch(
+        getApiUrl("/comment/translate"),
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            text: originalText,
+            sourceLanguage: "auto",
+            targetLanguage: translationLanguage,
+          }),
         }
-      } catch (backendError) {
-        console.warn("Backend translation unavailable:", backendError);
-      }
+      );
 
-      // If the backend returns the original text (which happens when
-      // the backend route is only a placeholder), use Google Translate's
-      // public translation endpoint as a browser-side fallback.
-      const backendLooksTranslated =
-        backendTranslation &&
-        backendTranslation.toLowerCase() !== originalText.toLowerCase();
+      const data = await response.json().catch(() => ({}));
 
-      if (backendLooksTranslated) {
-        setTranslatedComments((previous) => ({
-          ...previous,
-          [commentId]: backendTranslation,
-        }));
+      if (
+        !response.ok ||
+        !data?.success ||
+        typeof data?.translatedText !== "string"
+      ) {
+        setTranslationError(
+          data?.message || "Translation service is unavailable."
+        );
         return;
-      }
-
-      const translateUrl =
-        `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${encodeURIComponent(translationLanguage)}&dt=t&q=${encodeURIComponent(originalText)}`;
-
-      const translateResponse = await fetch(translateUrl);
-
-      if (!translateResponse.ok) {
-        throw new Error("Translation service is unavailable.");
-      }
-
-      const translateData = await translateResponse.json();
-
-      const translatedText = Array.isArray(translateData?.[0])
-        ? translateData[0]
-            .filter((part: any) => Array.isArray(part) && typeof part[0] === "string")
-            .map((part: any) => part[0])
-            .join("")
-            .trim()
-        : "";
-
-      if (!translatedText) {
-        throw new Error("No translated text was returned.");
       }
 
       setTranslatedComments((previous) => ({
         ...previous,
-        [commentId]: translatedText,
+        [commentId]: data.translatedText.trim(),
       }));
     } catch (error) {
       console.error("Translation error:", error);
-      alert(
+      setTranslationError(
         error instanceof Error
           ? error.message
           : "Unable to translate comment"
@@ -2839,24 +2805,22 @@ export default function WatchPage() {
 
           <div className="overflow-hidden rounded-xl bg-black">
             {videoUrl ? (
-              <video
+              <CustomVideoPlayer
                 key={videoUrl}
-                className="aspect-video w-full bg-black"
-                controls
-                playsInline
-                preload="metadata"
-              >
-                <source
-                  src={videoUrl}
-                  type={
-                    video.filetype ||
-                    "video/mp4"
-                  }
-                />
-
-                Your browser does not
-                support the video element.
-              </video>
+                src={videoUrl}
+                videoId={video._id}
+                userId={userId ? String(userId) : undefined}
+                nextVideoId={recommended[0]?._id}
+                nextVideoTitle={recommended[0]?.videotitle}
+                onNext={
+                  recommended[0]
+                    ? () =>
+                        router.push(
+                          `/watch/${recommended[0]._id}`
+                        )
+                    : undefined
+                }
+              />
             ) : (
               <div className="flex aspect-video items-center justify-center text-white">
                 Video unavailable
@@ -3086,6 +3050,12 @@ export default function WatchPage() {
                 <option value="es">Spanish</option>
               </select>
             </div>
+
+            {translationError && (
+              <p className="mb-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+                {translationError}
+              </p>
+            )}
 
             {/* COMMENT SORTING */}
 

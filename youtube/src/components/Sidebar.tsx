@@ -11,6 +11,7 @@ import {
   Clock,
   User,
   LogOut,
+  Video,
 } from "lucide-react";
 
 import { useUser } from "@/lib/AuthContext";
@@ -32,7 +33,7 @@ export default function Sidebar() {
 
   return (
     <>
-      <aside className="min-h-screen w-64 shrink-0 border-r bg-white">
+      <aside className="min-h-[calc(100vh-4rem)] w-64 shrink-0 border-r bg-background text-foreground">
         <div className="flex flex-col p-3">
 
           {/* ==================================
@@ -41,7 +42,7 @@ export default function Sidebar() {
 
           <Link
             href="/"
-            className="flex items-center gap-5 rounded-lg px-4 py-3 hover:bg-gray-100"
+            className="flex items-center gap-5 rounded-lg px-4 py-3 hover:bg-muted"
           >
             <Home size={22} />
 
@@ -56,7 +57,7 @@ export default function Sidebar() {
 
           <Link
             href="/explore"
-            className="flex items-center gap-5 rounded-lg px-4 py-3 hover:bg-gray-100"
+            className="flex items-center gap-5 rounded-lg px-4 py-3 hover:bg-muted"
           >
             <Compass size={22} />
 
@@ -71,12 +72,27 @@ export default function Sidebar() {
 
           <Link
             href="/subscriptions"
-            className="flex items-center gap-5 rounded-lg px-4 py-3 hover:bg-gray-100"
+            className="flex items-center gap-5 rounded-lg px-4 py-3 hover:bg-muted"
           >
             <PlaySquare size={22} />
 
             <span className="text-sm font-medium">
               Subscriptions
+            </span>
+          </Link>
+
+          {/* ==================================
+              VIDEO CALL
+          ================================== */}
+
+          <Link
+            href="/call"
+            className="flex items-center gap-5 rounded-lg px-4 py-3 hover:bg-muted"
+          >
+            <Video size={22} />
+
+            <span className="text-sm font-medium">
+              Video Call
             </span>
           </Link>
 
@@ -92,7 +108,7 @@ export default function Sidebar() {
 
           <Link
             href="/history"
-            className="flex items-center gap-5 rounded-lg px-4 py-3 hover:bg-gray-100"
+            className="flex items-center gap-5 rounded-lg px-4 py-3 hover:bg-muted"
           >
             <History size={22} />
 
@@ -107,7 +123,7 @@ export default function Sidebar() {
 
           <Link
             href="/liked"
-            className="flex items-center gap-5 rounded-lg px-4 py-3 hover:bg-gray-100"
+            className="flex items-center gap-5 rounded-lg px-4 py-3 hover:bg-muted"
           >
             <ThumbsUp size={22} />
 
@@ -122,7 +138,7 @@ export default function Sidebar() {
 
           <Link
             href="/watch-later"
-            className="flex items-center gap-5 rounded-lg px-4 py-3 hover:bg-gray-100"
+            className="flex items-center gap-5 rounded-lg px-4 py-3 hover:bg-muted"
           >
             <Clock size={22} />
 
@@ -137,7 +153,7 @@ export default function Sidebar() {
 
           <Link
             href="/channel"
-            className="flex items-center gap-5 rounded-lg px-4 py-3 hover:bg-gray-100"
+            className="flex items-center gap-5 rounded-lg px-4 py-3 hover:bg-muted"
           >
             <User size={22} />
 
@@ -179,7 +195,7 @@ export default function Sidebar() {
                 onClick={async () => {
                   await logout();
                 }}
-                className="mt-2 flex w-full items-center gap-5 rounded-lg px-4 py-3 text-left hover:bg-gray-100"
+                className="mt-2 flex w-full items-center gap-5 rounded-lg px-4 py-3 text-left hover:bg-muted"
               >
                 <LogOut size={22} />
 
@@ -199,7 +215,7 @@ export default function Sidebar() {
                 onClick={async () => {
                   await handlegooglesignin();
                 }}
-                className="mt-2 flex w-full items-center gap-5 rounded-lg px-4 py-3 text-left hover:bg-gray-100"
+                className="mt-2 flex w-full items-center gap-5 rounded-lg px-4 py-3 text-left hover:bg-muted"
               >
                 <User size={22} />
 

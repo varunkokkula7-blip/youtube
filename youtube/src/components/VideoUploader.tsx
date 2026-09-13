@@ -131,7 +131,11 @@ const VideoUploader = ({
 
       xhr.open(
         "POST",
-        "http://localhost:5000/video/upload"
+        `${(
+          process.env.NEXT_PUBLIC_API_URL ||
+          process.env.NEXT_PUBLIC_BACKEND_URL ||
+          "http://localhost:5000"
+        ).replace(/\/$/, "")}/video/upload`
       );
 
 

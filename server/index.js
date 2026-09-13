@@ -1,7 +1,9 @@
 import express from "express";
+import http from "http";
 import cors from "cors";
 import dotenv from "dotenv";
 import mongoose from "mongoose";
+import { Server as SocketIOServer } from "socket.io";
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -14,10 +16,13 @@ import commentRoutes from "./routes/comment.js";
 import adminCommentsRoutes from "./routes/adminComments.js";
 import downloadRoutes from "./routes/download.js";
 import subscriptionRoutes from "./routes/subscription.js";
-
+import paymentRoutes from "./routes/payment.js";
+import securityRoutes from "./routes/security.js";
+import { setupVideoCallSocket } from "./videoCallSocket.js";
 dotenv.config();
 
 const app = express();
+const httpServer = http.createServer(app);
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -27,6 +32,15 @@ const allowedOrigins = [
   "http://localhost:3001",
   "https://youtube-bice-rho.vercel.app",
 ];
+
+const io = new SocketIOServer(httpServer, {
+  cors: {
+    origin: allowedOrigins,
+    credentials: true,
+  },
+});
+
+setupVideoCallSocket(io);
 
 app.use(
   cors({
@@ -62,6 +76,8 @@ app.use(
 );
 app.use("/download", downloadRoutes);
 app.use("/subscription", subscriptionRoutes);
+app.use("/api/payment", paymentRoutes);
+app.use("/security", securityRoutes);
 app.get("/", (req, res) => {
   res.json({
     success: true,
@@ -108,18 +124,23 @@ if (!DB_URL) {
   process.exit(1);
 }
 
-mongoose
-  .connect(DB_URL)
-  .then(() => {
+const startServer = async () => {
+  try {
+    await mongoose.connect(DB_URL, {
+      serverSelectionTimeoutMS: 10000,
+      connectTimeoutMS: 10000,
+    });
+
     console.log("MongoDB connected successfully");
 
-    app.listen(PORT, () => {
+    httpServer.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);
     });
-  })
-  .catch((error) => {
-    console.error(
-      "MongoDB connection error:",
-      error
-    );
-  });
+  } catch (error) {
+    console.error("MongoDB connection error:", error);
+    console.log("Retrying MongoDB connection in 5 seconds...");
+    setTimeout(startServer, 5000);
+  }
+};
+
+startServer();
