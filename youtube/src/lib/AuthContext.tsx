@@ -239,6 +239,17 @@ export const UserProvider = ({
     setThemeState(nextTheme);
   };
 
+  const getSavedTheme = (): "light" | "dark" | null => {
+    if (typeof window === "undefined") {
+      return null;
+    }
+
+    const savedTheme = localStorage.getItem("theme");
+    return savedTheme === "light" || savedTheme === "dark"
+      ? savedTheme
+      : null;
+  };
+
   // ==========================================
   // LOGIN
   // ==========================================
@@ -254,17 +265,25 @@ export const UserProvider = ({
       userdata._id
     );
 
-    setUser(userdata);
-    applyTheme(userdata.themePreference || getAutomaticTheme());
+    const preferredTheme =
+      userdata.themePreference || getSavedTheme() || getAutomaticTheme();
+
+    const loggedInUser = {
+      ...userdata,
+      themePreference: preferredTheme,
+    };
+
+    setUser(loggedInUser);
+    applyTheme(preferredTheme);
 
     if (typeof window !== "undefined") {
       localStorage.setItem(
         "user",
-        JSON.stringify(userdata)
+        JSON.stringify(loggedInUser)
       );
       localStorage.setItem(
         "theme",
-        userdata.themePreference || getAutomaticTheme()
+        preferredTheme
       );
     }
   };
@@ -577,14 +596,8 @@ export const UserProvider = ({
     if (typeof window !== "undefined") {
       const savedUser =
         localStorage.getItem("user");
-      const savedTheme =
-        localStorage.getItem("theme");
-
-      if (savedTheme === "light" || savedTheme === "dark") {
-        applyTheme(savedTheme);
-      } else {
-        applyTheme(getAutomaticTheme());
-      }
+      const savedTheme = getSavedTheme();
+      applyTheme(savedTheme || getAutomaticTheme());
 
       if (savedUser) {
         try {
@@ -594,10 +607,7 @@ export const UserProvider = ({
           if (parsedUser?._id) {
             setUser(parsedUser);
             applyTheme(
-              parsedUser.themePreference ||
-                (savedTheme === "light" || savedTheme === "dark"
-                  ? savedTheme
-                  : getAutomaticTheme())
+              parsedUser.themePreference || savedTheme || getAutomaticTheme()
             );
 
             console.log(
