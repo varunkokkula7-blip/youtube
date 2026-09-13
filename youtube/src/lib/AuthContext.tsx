@@ -90,6 +90,7 @@ const API_URL =
   process.env.NEXT_PUBLIC_API_URL ||
   process.env.NEXT_PUBLIC_BACKEND_URL ||
   "https://youtube-hiv1.onrender.com";
+const BACKEND_URL = API_URL.replace(/\/$/, "");
 
 const loginToBackend = async (
   email: string,
@@ -101,10 +102,11 @@ const loginToBackend = async (
   otpRequired: boolean;
   email?: string;
   challengeToken?: string;
+  error?: string;
 } | null> => {
   try {
     const response = await fetch(
-      `${API_URL}/user/login`,
+      `${BACKEND_URL}/user/login`,
       {
         method: "POST",
         headers: {
@@ -129,7 +131,20 @@ const loginToBackend = async (
         text
       );
 
-      return null;
+      let message = "Unable to complete sign in.";
+      try {
+        const errorData = JSON.parse(text);
+        if (typeof errorData?.message === "string") {
+          message = errorData.message;
+        }
+      } catch {
+        // Keep the user-facing fallback when the backend returns non-JSON.
+      }
+
+      return {
+        otpRequired: false,
+        error: message,
+      };
     }
 
     const data = JSON.parse(text);
@@ -247,6 +262,10 @@ export const UserProvider = ({
         "user",
         JSON.stringify(userdata)
       );
+      localStorage.setItem(
+        "theme",
+        userdata.themePreference || getAutomaticTheme()
+      );
     }
   };
 
@@ -322,6 +341,9 @@ export const UserProvider = ({
         console.error(
           "Backend did not create/login the user."
         );
+        if (backendLogin?.error) {
+          window.alert(backendLogin.error);
+        }
       }
     } catch (error: any) {
       console.error(
@@ -407,7 +429,7 @@ export const UserProvider = ({
 
     try {
       const response = await fetch(
-        `${API_URL}/user/verify-otp`,
+        `${BACKEND_URL}/user/verify-otp`,
         {
           method: "POST",
           headers: {
@@ -455,10 +477,18 @@ export const UserProvider = ({
   };
 
   const setTheme = async (nextTheme: "light" | "dark") => {
-    if (!user?._id) return;
+    applyTheme(nextTheme);
+
+    if (typeof window !== "undefined") {
+      localStorage.setItem("theme", nextTheme);
+    }
+
+    if (!user?._id) {
+      return;
+    }
 
     const response = await fetch(
-      `${API_URL}/security/theme/${user._id}`,
+      `${BACKEND_URL}/security/theme/${encodeURIComponent(user._id)}`,
       {
         method: "PUT",
         headers: {
@@ -470,7 +500,7 @@ export const UserProvider = ({
 
     const data = await response.json();
     if (!response.ok || !data.success) {
-      throw new Error(data.message || "Unable to change theme");
+      throw new Error(data.message || "Unable to save theme preference");
     }
 
     const updatedUser = {
@@ -479,7 +509,6 @@ export const UserProvider = ({
     };
     setUser(updatedUser);
     localStorage.setItem("user", JSON.stringify(updatedUser));
-    applyTheme(nextTheme);
   };
 
   // ==========================================
@@ -548,6 +577,14 @@ export const UserProvider = ({
     if (typeof window !== "undefined") {
       const savedUser =
         localStorage.getItem("user");
+      const savedTheme =
+        localStorage.getItem("theme");
+
+      if (savedTheme === "light" || savedTheme === "dark") {
+        applyTheme(savedTheme);
+      } else {
+        applyTheme(getAutomaticTheme());
+      }
 
       if (savedUser) {
         try {
@@ -557,7 +594,10 @@ export const UserProvider = ({
           if (parsedUser?._id) {
             setUser(parsedUser);
             applyTheme(
-              parsedUser.themePreference || getAutomaticTheme()
+              parsedUser.themePreference ||
+                (savedTheme === "light" || savedTheme === "dark"
+                  ? savedTheme
+                  : getAutomaticTheme())
             );
 
             console.log(
@@ -604,28 +644,36 @@ export const UserProvider = ({
               localStorage.getItem(
                 getDeviceTokenKey(email)
               ) || "";
-            const backendLogin =
-              await loginToBackend(
-                email,
-                name,
-                image,
-                deviceToken
-              );
+            backendLoginInProgress.current = true;
+            try {
+              const backendLogin =
+                await loginToBackend(
+                  email,
+                  name,
+                  image,
+                  deviceToken
+                );
 
-            if (backendLogin?.otpRequired) {
-              setOtpError("");
-              setOtpState({
-                required: true,
-                email: backendLogin.email || email,
-                challengeToken:
-                  backendLogin.challengeToken || "",
-              });
-            } else if (backendLogin?.user) {
-              login(backendLogin.user);
-            } else {
-              console.error(
-                "Could not login user to backend."
-              );
+              if (backendLogin?.otpRequired) {
+                setOtpError("");
+                setOtpState({
+                  required: true,
+                  email: backendLogin.email || email,
+                  challengeToken:
+                    backendLogin.challengeToken || "",
+                });
+              } else if (backendLogin?.user) {
+                login(backendLogin.user);
+              } else {
+                console.error(
+                  "Could not login user to backend."
+                );
+                if (backendLogin?.error) {
+                  window.alert(backendLogin.error);
+                }
+              }
+            } finally {
+              backendLoginInProgress.current = false;
             }
           } else {
             console.log(

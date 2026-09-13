@@ -2,9 +2,7 @@ import crypto from "crypto";
 import nodemailer from "nodemailer";
 
 export const generateOTP = () => {
-  return Math.floor(
-    100000 + Math.random() * 900000
-  ).toString();
+  return crypto.randomInt(100000, 1000000).toString();
 };
 
 export const hashOTP = (otp) => {
@@ -20,31 +18,44 @@ export const generateToken = () => {
 
 export const sendOTPEmail = async (email, otp) => {
   try {
+    const smtpUser =
+      process.env.SMTP_USER || process.env.EMAIL_USER;
+    const smtpPassword =
+      process.env.SMTP_PASSWORD || process.env.EMAIL_PASSWORD;
+    const smtpHost =
+      process.env.SMTP_HOST || "smtp.gmail.com";
+    const smtpPort = Number(
+      process.env.SMTP_PORT || 587
+    );
+    const smtpSecure =
+      process.env.SMTP_SECURE === "true" ||
+      smtpPort === 465;
+
     if (
-      !process.env.EMAIL_USER ||
-      !process.env.EMAIL_PASSWORD
+      !smtpUser ||
+      !smtpPassword
     ) {
       throw new Error(
-        "EMAIL_USER and EMAIL_PASSWORD must be configured"
+        "SMTP_USER and SMTP_PASSWORD (or EMAIL_USER and EMAIL_PASSWORD) must be configured"
       );
     }
 
     console.log("=================================");
     console.log("OTP EMAIL DEBUG");
-    console.log("Sender:", process.env.EMAIL_USER);
+    console.log("Sender:", smtpUser);
     console.log("Recipient:", email);
     console.log("OTP:", otp);
     console.log("=================================");
 
     const transporter = nodemailer.createTransport({
-      host: "smtp.gmail.com",
-      port: 587,
-      secure: false,
-      requireTLS: true,
+      host: smtpHost,
+      port: smtpPort,
+      secure: smtpSecure,
+      requireTLS: !smtpSecure && smtpPort === 587,
 
       auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASSWORD.replace(/\s/g, ""),
+        user: smtpUser,
+        pass: smtpPassword.replace(/\s/g, ""),
       },
     });
 
@@ -55,7 +66,7 @@ export const sendOTPEmail = async (email, otp) => {
     console.log("Gmail SMTP connection successful.");
 
     const info = await transporter.sendMail({
-      from: `"YourTube Clone" <${process.env.EMAIL_USER}>`,
+      from: `"YourTube Clone" <${smtpUser}>`,
       to: email,
       subject: "Your YouTube Clone Login OTP",
 
