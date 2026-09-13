@@ -171,12 +171,10 @@ export default function VideoGrid() {
         console.log("Video URL:", videoUrl);
 
         return (
-          <Link
+          <div
             key={video._id}
-            href={`/watch/${video._id}`}
-            className="block"
+            className="overflow-hidden rounded-xl bg-card text-card-foreground shadow-md transition hover:shadow-lg"
           >
-            <div className="overflow-hidden rounded-xl bg-card text-card-foreground shadow-md transition hover:shadow-lg">
 
               {/* ==================================
                   VIDEO PREVIEW
@@ -219,7 +217,10 @@ export default function VideoGrid() {
                   VIDEO INFORMATION
               ================================== */}
 
-              <div className="p-3">
+              <Link
+                href={`/watch/${video._id}`}
+                className="block p-3"
+              >
                 <h3 className="line-clamp-2 text-lg font-semibold">
                   {video.videotitle ||
                     "Untitled video"}
@@ -235,9 +236,8 @@ export default function VideoGrid() {
                   {(video.views || 0).toLocaleString()}{" "}
                   views
                 </p>
-              </div>
-            </div>
-          </Link>
+              </Link>
+          </div>
         );
       })}
     </div>

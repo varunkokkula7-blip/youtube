@@ -28,9 +28,8 @@ export default function VideoCard({ video }: VideoCardProps) {
     : "";
 
   return (
-    <Link href={`/watch/${video._id}`} className="block">
-      <div className="w-full cursor-pointer">
-        <div className="aspect-video overflow-hidden rounded-xl bg-black">
+    <div className="w-full">
+      <div className="aspect-video overflow-hidden rounded-xl bg-black">
           {videoUrl ? (
             <video
               src={videoUrl}
@@ -53,7 +52,10 @@ export default function VideoCard({ video }: VideoCardProps) {
           )}
         </div>
 
-        <div className="mt-3 flex gap-3">
+      <Link
+        href={`/watch/${video._id}`}
+        className="mt-3 flex gap-3"
+      >
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-300">
             {(
               video.videochanel ||
@@ -75,8 +77,7 @@ export default function VideoCard({ video }: VideoCardProps) {
               {video.views || 0} views
             </p>
           </div>
-        </div>
-      </div>
-    </Link>
+      </Link>
+    </div>
   );
 }
