@@ -204,7 +204,11 @@ const loginToBackend = async (
       error
     );
 
-    return null;
+    return {
+      otpRequired: false,
+      error:
+        "The authentication server could not be reached. Please try again.",
+    };
   }
 };
 
@@ -347,7 +351,10 @@ export const UserProvider = ({
           deviceToken
         );
 
-      if (backendLogin?.otpRequired) {
+      if (
+        backendLogin?.otpRequired &&
+        backendLogin.challengeToken
+      ) {
         setOtpError("");
         setOtpState({
           required: true,
@@ -355,6 +362,10 @@ export const UserProvider = ({
           challengeToken:
             backendLogin.challengeToken || "",
         });
+      } else if (backendLogin?.otpRequired) {
+        window.alert(
+          "The server started OTP verification but did not return a valid challenge. Please sign in again."
+        );
       } else if (backendLogin?.user) {
         login(backendLogin.user);
       } else {
@@ -590,13 +601,20 @@ export const UserProvider = ({
             deviceToken
           );
 
-          if (backendLogin?.otpRequired) {
+          if (
+            backendLogin?.otpRequired &&
+            backendLogin.challengeToken
+          ) {
             setOtpError("");
             setOtpState({
               required: true,
               email: backendLogin.email || email,
               challengeToken: backendLogin.challengeToken || "",
             });
+          } else if (backendLogin?.otpRequired) {
+            window.alert(
+              "The server started OTP verification but did not return a valid challenge. Please sign in again."
+            );
           } else if (backendLogin?.user) {
             login(backendLogin.user);
           } else if (backendLogin?.error) {
@@ -708,7 +726,10 @@ export const UserProvider = ({
                   deviceToken
                 );
 
-              if (backendLogin?.otpRequired) {
+              if (
+                backendLogin?.otpRequired &&
+                backendLogin.challengeToken
+              ) {
                 setOtpError("");
                 setOtpState({
                   required: true,
@@ -716,6 +737,10 @@ export const UserProvider = ({
                   challengeToken:
                     backendLogin.challengeToken || "",
                 });
+              } else if (backendLogin?.otpRequired) {
+                window.alert(
+                  "The server started OTP verification but did not return a valid challenge. Please sign in again."
+                );
               } else if (backendLogin?.user) {
                 login(backendLogin.user);
               } else {
