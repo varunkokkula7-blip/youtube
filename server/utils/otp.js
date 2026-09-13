@@ -29,7 +29,7 @@ export const sendOTPEmail = async (email, otp) => {
     );
     const smtpSecure =
       process.env.SMTP_SECURE === "true" ||
-      smtpPort === 465;
+      smtpPort === 587;
 
     if (
       !smtpUser ||
