@@ -37,6 +37,14 @@ export default function VideoCard({ video }: VideoCardProps) {
               className="h-full w-full object-cover"
               muted
               preload="metadata"
+              controls
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+              }}
+              onMouseDown={(event) => {
+                event.stopPropagation();
+              }}
             />
           ) : (
             <div className="flex h-full items-center justify-center text-white">

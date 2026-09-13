@@ -190,6 +190,13 @@ export default function VideoGrid() {
                     muted
                     playsInline
                     controls
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                    }}
+                    onMouseDown={(event) => {
+                      event.stopPropagation();
+                    }}
                   >
                     <source
                       src={videoUrl}
