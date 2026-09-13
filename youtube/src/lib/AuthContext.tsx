@@ -305,20 +305,8 @@ export const UserProvider = ({
     signingIn.current = true;
 
     try {
-      const isLocalDevelopment =
-        typeof window !== "undefined" &&
-        (window.location.hostname === "localhost" ||
-          window.location.hostname === "127.0.0.1");
-
-      // Redirects avoid popup blockers in deployed browsers.
-      if (!isLocalDevelopment) {
-        await signInWithRedirect(
-          auth,
-          provider
-        );
-        return;
-      }
-
+      // Handle the Firebase result in this same browser context so the
+      // backend login and OTP challenge cannot be skipped after a redirect.
       const result =
         await signInWithPopup(
           auth,
