@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/router";
 
 type Video = {
   _id: string;
@@ -31,6 +32,7 @@ const API_URL =
   "https://youtube-hiv1.onrender.com";
 
 export default function VideoGrid() {
+  const router = useRouter();
   const [videos, setVideos] = useState<Video[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -180,21 +182,19 @@ export default function VideoGrid() {
                   VIDEO PREVIEW
               ================================== */}
 
-              <div className="bg-black">
+              <button
+                type="button"
+                className="block w-full cursor-pointer bg-black text-left"
+                aria-label={`Open ${video.videotitle || "video"}`}
+                onClick={() => router.push(`/watch/${video._id}`)}
+              >
                 {videoUrl ? (
                   <video
                     className="h-48 w-full object-cover"
                     preload="metadata"
                     muted
                     playsInline
-                    controls
-                    onClick={(event) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                    }}
-                    onMouseDown={(event) => {
-                      event.stopPropagation();
-                    }}
+                    tabIndex={-1}
                   >
                     <source
                       src={videoUrl}
@@ -211,7 +211,7 @@ export default function VideoGrid() {
                     Video unavailable
                   </div>
                 )}
-              </div>
+              </button>
 
               {/* ==================================
                   VIDEO INFORMATION
