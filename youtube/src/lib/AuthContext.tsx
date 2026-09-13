@@ -261,6 +261,20 @@ export const UserProvider = ({
     signingIn.current = true;
 
     try {
+      const isLocalDevelopment =
+        typeof window !== "undefined" &&
+        (window.location.hostname === "localhost" ||
+          window.location.hostname === "127.0.0.1");
+
+      // Redirects avoid popup blockers in deployed browsers.
+      if (!isLocalDevelopment) {
+        await signInWithRedirect(
+          auth,
+          provider
+        );
+        return;
+      }
+
       const result =
         await signInWithPopup(
           auth,
@@ -362,6 +376,20 @@ export const UserProvider = ({
       ) {
         window.alert(
           "Google sign-in could not connect. Check your internet connection and try again."
+        );
+      }
+
+      if (
+        error?.code ===
+        "auth/unauthorized-domain"
+      ) {
+        const hostname =
+          typeof window !== "undefined"
+            ? window.location.hostname
+            : "this Vercel domain";
+
+        window.alert(
+          `Google sign-in is not enabled for ${hostname}. Add this hostname in Firebase Console > Authentication > Settings > Authorized domains, then redeploy.`
         );
       }
     } finally {
