@@ -380,7 +380,7 @@ const moderateText = async ({
 };
 
 // ======================================================
-// COMMENT TRANSLATION
+// COMMENT TRANSLATION — GOOGLE APPS SCRIPT
 // ======================================================
 
 router.post("/translate", async (req, res) => {
@@ -390,6 +390,10 @@ router.post("/translate", async (req, res) => {
       sourceLanguage = "auto",
       targetLanguage,
     } = req.body;
+
+    // -----------------------------------------------
+    // VALIDATION
+    // -----------------------------------------------
 
     if (!text || !String(text).trim()) {
       return res.status(400).json({
@@ -405,9 +409,13 @@ router.post("/translate", async (req, res) => {
       });
     }
 
-    const originalText = String(text).trim();
+    const originalText =
+      String(text).trim();
 
-    // English does not need external translation
+    // -----------------------------------------------
+    // ENGLISH DOES NOT NEED TRANSLATION
+    // -----------------------------------------------
+
     if (
       targetLanguage === "en" ||
       sourceLanguage === targetLanguage
@@ -418,172 +426,138 @@ router.post("/translate", async (req, res) => {
       });
     }
 
-    let translatedText = "";
+    // -----------------------------------------------
+    // GOOGLE APPS SCRIPT URL
+    // -----------------------------------------------
 
-    // ==================================================
-    // 1. GOOGLE TRANSLATION
-    // ==================================================
+    const translationUrl =
+      process.env.TRANSLATION_API_URL;
 
-    try {
-      const googleUrl =
-        "https://translate.googleapis.com/translate_a/single" +
-        "?client=gtx" +
-        "&sl=" +
-        encodeURIComponent(
-          sourceLanguage || "auto"
-        ) +
-        "&tl=" +
-        encodeURIComponent(targetLanguage) +
-        "&dt=t" +
-        "&q=" +
-        encodeURIComponent(originalText);
-
-      console.log(
-        "Translation request:",
-        sourceLanguage,
-        "->",
-        targetLanguage
-      );
-
-      const googleResponse = await fetch(
-        googleUrl,
-        {
-          method: "GET",
-          headers: {
-            "User-Agent":
-              "Mozilla/5.0",
-            Accept:
-              "application/json",
-          },
-        }
-      );
-
-      console.log(
-        "Google translation status:",
-        googleResponse.status
-      );
-
-      if (googleResponse.ok) {
-        const googleData =
-          await googleResponse.json();
-
-        if (
-          Array.isArray(
-            googleData?.[0]
-          )
-        ) {
-          translatedText =
-            googleData[0]
-              .filter(
-                (item) =>
-                  Array.isArray(item) &&
-                  typeof item[0] ===
-                    "string"
-              )
-              .map(
-                (item) => item[0]
-              )
-              .join("")
-              .trim();
-        }
-      }
-    } catch (error) {
+    if (!translationUrl) {
       console.error(
-        "Google translation error:",
-        error.message
+        "TRANSLATION_API_URL is not configured."
       );
-    }
 
-    // ==================================================
-    // 2. MYMEMORY FALLBACK
-    // ==================================================
-
-    if (!translatedText) {
-      try {
-        const fallbackSource =
-          sourceLanguage &&
-          sourceLanguage !== "auto"
-            ? sourceLanguage
-            : "en";
-
-        const myMemoryUrl =
-          "https://api.mymemory.translated.net/get" +
-          "?q=" +
-          encodeURIComponent(
-            originalText
-          ) +
-          "&langpair=" +
-          encodeURIComponent(
-            fallbackSource +
-              "|" +
-              targetLanguage
-          );
-
-        console.log(
-          "Trying MyMemory translation..."
-        );
-
-        const fallbackResponse =
-          await fetch(
-            myMemoryUrl,
-            {
-              method: "GET",
-              headers: {
-                Accept:
-                  "application/json",
-              },
-            }
-          );
-
-        console.log(
-          "MyMemory status:",
-          fallbackResponse.status
-        );
-
-        if (fallbackResponse.ok) {
-          const fallbackData =
-            await fallbackResponse.json();
-
-          const result =
-            fallbackData?.responseData
-              ?.translatedText;
-
-          if (
-            typeof result ===
-              "string" &&
-            result.trim()
-          ) {
-            translatedText =
-              result.trim();
-          }
-        }
-      } catch (error) {
-        console.error(
-          "MyMemory translation error:",
-          error.message
-        );
-      }
-    }
-
-    // ==================================================
-    // NO TRANSLATION
-    // ==================================================
-
-    if (!translatedText) {
-      return res.status(503).json({
+      return res.status(500).json({
         success: false,
         message:
-          "Translation service is temporarily unavailable. Please try again.",
+          "Translation service is not configured on the server.",
       });
     }
 
-    // ==================================================
-    // SUCCESS
-    // ==================================================
+    console.log(
+      "Translation request:",
+      sourceLanguage,
+      "->",
+      targetLanguage
+    );
 
-    return res.json({
-      success: true,
-      translatedText,
+    // -----------------------------------------------
+    // CALL GOOGLE APPS SCRIPT
+    // -----------------------------------------------
+
+    const translationResponse =
+      await fetch(
+        translationUrl,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type":
+              "application/json",
+            Accept:
+              "application/json",
+          },
+          body: JSON.stringify({
+            text: originalText,
+            sourceLanguage:
+              sourceLanguage === "auto"
+                ? ""
+                : sourceLanguage,
+            targetLanguage,
+          }),
+        }
+      );
+
+    console.log(
+      "Google Apps Script translation status:",
+      translationResponse.status
+    );
+
+    // -----------------------------------------------
+    // READ RESPONSE
+    // -----------------------------------------------
+
+    const responseText =
+      await translationResponse.text();
+
+    let data;
+
+    try {
+      data =
+        JSON.parse(responseText);
+    } catch (parseError) {
+      console.error(
+        "Translation response was not valid JSON:",
+        responseText
+      );
+
+      return res.status(503).json({
+        success: false,
+        message:
+          "Translation service returned an invalid response.",
+      });
+    }
+
+    // -----------------------------------------------
+    // TRANSLATION ERROR
+    // -----------------------------------------------
+
+    if (!translationResponse.ok) {
+      console.error(
+        "Google Apps Script translation error:",
+        data
+      );
+
+      return res.status(503).json({
+        success: false,
+        message:
+          data?.error ||
+          data?.message ||
+          "Translation service is temporarily unavailable.",
+      });
+    }
+
+    // -----------------------------------------------
+    // SUCCESS
+    // -----------------------------------------------
+
+    if (
+      data?.success === true &&
+      typeof data?.translatedText ===
+        "string" &&
+      data.translatedText.trim()
+    ) {
+      return res.json({
+        success: true,
+        translatedText:
+          data.translatedText.trim(),
+      });
+    }
+
+    // -----------------------------------------------
+    // INVALID TRANSLATION RESPONSE
+    // -----------------------------------------------
+
+    console.error(
+      "Invalid translation response:",
+      data
+    );
+
+    return res.status(503).json({
+      success: false,
+      message:
+        data?.error ||
+        "Translation service did not return translated text.",
     });
   } catch (error) {
     console.error(
