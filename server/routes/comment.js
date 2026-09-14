@@ -177,9 +177,7 @@ const hasMaliciousLink = (text) => {
   }
 
   const urls =
-    lower.match(
-      /https?:\/\/[^\s]+/gi
-    ) || [];
+    lower.match(/https?:\/\/[^\s]+/gi) || [];
 
   for (const url of urls) {
     try {
@@ -382,87 +380,206 @@ const moderateText = async ({
 };
 
 // ======================================================
-// TRANSLATION
-// KEEP YOUR EXISTING TRANSLATION IMPLEMENTATION HERE
+// COMMENT TRANSLATION
 // ======================================================
 
 router.post("/translate", async (req, res) => {
   try {
     const {
       text,
-      sourceLanguage,
+      sourceLanguage = "auto",
       targetLanguage,
     } = req.body;
 
-    if (!text?.trim()) {
+    if (!text || !String(text).trim()) {
       return res.status(400).json({
         success: false,
         message: "Text is required.",
       });
     }
 
-    // If English is selected, no translation is required.
-    if (
-      !targetLanguage ||
-      targetLanguage === sourceLanguage ||
-      targetLanguage === "en"
-    ) {
-      return res.json({
-        success: true,
-        translatedText: text,
+    if (!targetLanguage) {
+      return res.status(400).json({
+        success: false,
+        message: "Target language is required.",
       });
     }
 
-    const translationUrl =
-      "https://translate.googleapis.com/translate_a/single" +
-      `?client=gtx&sl=auto&tl=${encodeURIComponent(targetLanguage)}` +
-      `&dt=t&q=${encodeURIComponent(text.trim())}`;
+    const originalText = String(text).trim();
+
+    // English does not need external translation
+    if (
+      targetLanguage === "en" ||
+      sourceLanguage === targetLanguage
+    ) {
+      return res.json({
+        success: true,
+        translatedText: originalText,
+      });
+    }
 
     let translatedText = "";
 
-    try {
-      const translationResponse = await fetch(translationUrl);
+    // ==================================================
+    // 1. GOOGLE TRANSLATION
+    // ==================================================
 
-      if (translationResponse.ok) {
-        const translationData = await translationResponse.json();
-        translatedText = Array.isArray(translationData?.[0])
-          ? translationData[0]
+    try {
+      const googleUrl =
+        "https://translate.googleapis.com/translate_a/single" +
+        "?client=gtx" +
+        "&sl=" +
+        encodeURIComponent(
+          sourceLanguage || "auto"
+        ) +
+        "&tl=" +
+        encodeURIComponent(targetLanguage) +
+        "&dt=t" +
+        "&q=" +
+        encodeURIComponent(originalText);
+
+      console.log(
+        "Translation request:",
+        sourceLanguage,
+        "->",
+        targetLanguage
+      );
+
+      const googleResponse = await fetch(
+        googleUrl,
+        {
+          method: "GET",
+          headers: {
+            "User-Agent":
+              "Mozilla/5.0",
+            Accept:
+              "application/json",
+          },
+        }
+      );
+
+      console.log(
+        "Google translation status:",
+        googleResponse.status
+      );
+
+      if (googleResponse.ok) {
+        const googleData =
+          await googleResponse.json();
+
+        if (
+          Array.isArray(
+            googleData?.[0]
+          )
+        ) {
+          translatedText =
+            googleData[0]
               .filter(
-                (part) =>
-                  Array.isArray(part) &&
-                  typeof part[0] === "string"
+                (item) =>
+                  Array.isArray(item) &&
+                  typeof item[0] ===
+                    "string"
               )
-              .map((part) => part[0])
+              .map(
+                (item) => item[0]
+              )
               .join("")
-              .trim()
-          : "";
+              .trim();
+        }
       }
     } catch (error) {
-      console.warn("Primary translation service unavailable:", error.message);
+      console.error(
+        "Google translation error:",
+        error.message
+      );
     }
 
+    // ==================================================
+    // 2. MYMEMORY FALLBACK
+    // ==================================================
+
     if (!translatedText) {
-      const fallbackUrl =
-        "https://api.mymemory.translated.net/get" +
-        `?q=${encodeURIComponent(text.trim())}` +
-        `&langpair=${encodeURIComponent(
-          `${sourceLanguage && sourceLanguage !== "auto" ? sourceLanguage : "en"}|${targetLanguage}`
-        )}`;
+      try {
+        const fallbackSource =
+          sourceLanguage &&
+          sourceLanguage !== "auto"
+            ? sourceLanguage
+            : "en";
 
-      const fallbackResponse = await fetch(fallbackUrl);
+        const myMemoryUrl =
+          "https://api.mymemory.translated.net/get" +
+          "?q=" +
+          encodeURIComponent(
+            originalText
+          ) +
+          "&langpair=" +
+          encodeURIComponent(
+            fallbackSource +
+              "|" +
+              targetLanguage
+          );
 
-      if (fallbackResponse.ok) {
-        const fallbackData = await fallbackResponse.json();
-        translatedText =
-          typeof fallbackData?.responseData?.translatedText === "string"
-            ? fallbackData.responseData.translatedText.trim()
-            : "";
+        console.log(
+          "Trying MyMemory translation..."
+        );
+
+        const fallbackResponse =
+          await fetch(
+            myMemoryUrl,
+            {
+              method: "GET",
+              headers: {
+                Accept:
+                  "application/json",
+              },
+            }
+          );
+
+        console.log(
+          "MyMemory status:",
+          fallbackResponse.status
+        );
+
+        if (fallbackResponse.ok) {
+          const fallbackData =
+            await fallbackResponse.json();
+
+          const result =
+            fallbackData?.responseData
+              ?.translatedText;
+
+          if (
+            typeof result ===
+              "string" &&
+            result.trim()
+          ) {
+            translatedText =
+              result.trim();
+          }
+        }
+      } catch (error) {
+        console.error(
+          "MyMemory translation error:",
+          error.message
+        );
       }
     }
 
+    // ==================================================
+    // NO TRANSLATION
+    // ==================================================
+
     if (!translatedText) {
-      throw new Error("No translation was returned by the available services.");
+      return res.status(503).json({
+        success: false,
+        message:
+          "Translation service is temporarily unavailable. Please try again.",
+      });
     }
+
+    // ==================================================
+    // SUCCESS
+    // ==================================================
 
     return res.json({
       success: true,
@@ -470,13 +587,14 @@ router.post("/translate", async (req, res) => {
     });
   } catch (error) {
     console.error(
-      "Translation error:",
+      "Translation route error:",
       error
     );
 
     return res.status(500).json({
       success: false,
-      message: "Translation failed.",
+      message:
+        "Unable to translate comment.",
     });
   }
 });
@@ -485,65 +603,76 @@ router.post("/translate", async (req, res) => {
 // GET COMMENTS FOR VIDEO
 // ======================================================
 
-router.get("/video/:videoId", async (req, res) => {
-  try {
-    const { videoId } = req.params;
-    const sort =
-      req.query.sort || "newest";
+router.get(
+  "/video/:videoId",
+  async (req, res) => {
+    try {
+      const { videoId } =
+        req.params;
 
-    if (!isValidObjectId(videoId)) {
-      return res.status(400).json({
+      const sort =
+        req.query.sort || "newest";
+
+      if (!isValidObjectId(videoId)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid video ID.",
+        });
+      }
+
+      const comments =
+        await Comment.find({
+          videoid: videoId,
+          isDeleted: false,
+          moderationStatus: "visible",
+        })
+          .populate(
+            "viewer",
+            "_id name email image location joindeon"
+          )
+          .populate(
+            "mentions",
+            "_id name Channelname email image"
+          )
+          .lean();
+
+      const sorted =
+        sortComments(
+          comments,
+          sort
+        );
+
+      const formatted =
+        sorted.map(
+          (item) => ({
+            ...item,
+            likeCount:
+              item.likes?.length ||
+              0,
+            dislikeCount:
+              item.dislikes?.length ||
+              0,
+          })
+        );
+
+      return res.json({
+        success: true,
+        comments: formatted,
+      });
+    } catch (error) {
+      console.error(
+        "Get comments error:",
+        error
+      );
+
+      return res.status(500).json({
         success: false,
-        message: "Invalid video ID.",
+        message:
+          "Could not load comments.",
       });
     }
-
-    const comments =
-      await Comment.find({
-        videoid: videoId,
-        isDeleted: false,
-        moderationStatus: "visible",
-      })
-        .populate(
-          "viewer",
-          "_id name email image location joindeon"
-        )
-        .populate(
-          "mentions",
-          "_id name Channelname email image"
-        )
-        .lean();
-
-    const sorted =
-      sortComments(comments, sort);
-
-    const formatted = sorted.map(
-      (item) => ({
-        ...item,
-        likeCount:
-          item.likes?.length || 0,
-        dislikeCount:
-          item.dislikes?.length || 0,
-      })
-    );
-
-    return res.json({
-      success: true,
-      comments: formatted,
-    });
-  } catch (error) {
-    console.error(
-      "Get comments error:",
-      error
-    );
-
-    return res.status(500).json({
-      success: false,
-      message:
-        "Could not load comments.",
-    });
   }
-});
+);
 
 // ======================================================
 // GET REPLIES
@@ -557,11 +686,14 @@ router.get(
         req.params;
 
       if (
-        !isValidObjectId(commentId)
+        !isValidObjectId(
+          commentId
+        )
       ) {
         return res.status(400).json({
           success: false,
-          message: "Invalid comment ID.",
+          message:
+            "Invalid comment ID.",
         });
       }
 
@@ -585,17 +717,18 @@ router.get(
 
       return res.json({
         success: true,
-        replies: replies.map(
-          (item) => ({
-            ...item,
-            likeCount:
-              item.likes?.length ||
-              0,
-            dislikeCount:
-              item.dislikes?.length ||
-              0,
-          })
-        ),
+        replies:
+          replies.map(
+            (item) => ({
+              ...item,
+              likeCount:
+                item.likes?.length ||
+                0,
+              dislikeCount:
+                item.dislikes?.length ||
+                0,
+            })
+          ),
       });
     } catch (error) {
       console.error(
@@ -637,7 +770,8 @@ router.post(
       ) {
         return res.status(400).json({
           success: false,
-          message: "Invalid video ID.",
+          message:
+            "Invalid video ID.",
         });
       }
 
@@ -646,7 +780,8 @@ router.post(
       ) {
         return res.status(400).json({
           success: false,
-          message: "Invalid user ID.",
+          message:
+            "Invalid user ID.",
         });
       }
 
@@ -683,9 +818,11 @@ router.post(
           viewer: userId,
           videoid: videoId,
           comment: comment.trim(),
-          mentions: validMentions,
+          mentions:
+            validMentions,
           language,
-          parentCommentId: null,
+          parentCommentId:
+            null,
         });
 
       const populated =
@@ -735,9 +872,8 @@ router.post(
   "/:commentId/reply",
   async (req, res) => {
     try {
-      const {
-        commentId,
-      } = req.params;
+      const { commentId } =
+        req.params;
 
       const userId =
         getUserId(req);
@@ -749,7 +885,9 @@ router.post(
       } = req.body;
 
       if (
-        !isValidObjectId(commentId)
+        !isValidObjectId(
+          commentId
+        )
       ) {
         return res.status(400).json({
           success: false,
@@ -776,7 +914,8 @@ router.post(
       ) {
         return res.status(400).json({
           success: false,
-          message: "Invalid user ID.",
+          message:
+            "Invalid user ID.",
         });
       }
 
@@ -791,7 +930,8 @@ router.post(
       const allowed =
         await moderateText({
           userId,
-          videoId: parent.videoid,
+          videoId:
+            parent.videoid,
           text: comment.trim(),
           res,
         });
@@ -811,9 +951,12 @@ router.post(
       const reply =
         await Comment.create({
           viewer: userId,
-          videoid: parent.videoid,
-          comment: comment.trim(),
-          mentions: validMentions,
+          videoid:
+            parent.videoid,
+          comment:
+            comment.trim(),
+          mentions:
+            validMentions,
           language,
           parentCommentId:
             parent._id,
@@ -866,9 +1009,8 @@ router.post(
   "/:commentId/like",
   async (req, res) => {
     try {
-      const {
-        commentId,
-      } = req.params;
+      const { commentId } =
+        req.params;
 
       const userId =
         getUserId(req);
@@ -921,7 +1063,9 @@ router.post(
               String(userId)
           );
       } else {
-        comment.likes.push(userId);
+        comment.likes.push(
+          userId
+        );
       }
 
       await comment.save();
@@ -961,9 +1105,8 @@ router.post(
   "/:commentId/dislike",
   async (req, res) => {
     try {
-      const {
-        commentId,
-      } = req.params;
+      const { commentId } =
+        req.params;
 
       const userId =
         getUserId(req);
@@ -1059,9 +1202,8 @@ router.put(
   "/:commentId",
   async (req, res) => {
     try {
-      const {
-        commentId,
-      } = req.params;
+      const { commentId } =
+        req.params;
 
       const userId =
         getUserId(req);
@@ -1116,9 +1258,6 @@ router.put(
         });
       }
 
-      // Only perform profanity/link checks
-      // here. Duplicate/rate limit is mainly
-      // for new posts.
       const profanity =
         findProfanity(
           comment.trim()
@@ -1163,7 +1302,8 @@ router.put(
       existing.mentions =
         validMentions;
 
-      existing.isEdited = true;
+      existing.isEdited =
+        true;
 
       existing.editedAt =
         new Date();
@@ -1189,8 +1329,8 @@ router.put(
         comment: {
           ...populated,
           likeCount:
-            populated?.likes?.length ||
-            0,
+            populated?.likes
+              ?.length || 0,
           dislikeCount:
             populated?.dislikes
               ?.length || 0,
@@ -1219,9 +1359,8 @@ router.delete(
   "/:commentId",
   async (req, res) => {
     try {
-      const {
-        commentId,
-      } = req.params;
+      const { commentId } =
+        req.params;
 
       const userId =
         getUserId(req);
@@ -1324,7 +1463,9 @@ router.get(
         await User.find({
           $or: [
             { name: regex },
-            { Channelname: regex },
+            {
+              Channelname: regex,
+            },
             { email: regex },
           ],
         })
@@ -1361,9 +1502,8 @@ router.post(
   "/:commentId/report",
   async (req, res) => {
     try {
-      const {
-        commentId,
-      } = req.params;
+      const { commentId } =
+        req.params;
 
       const userId =
         getUserId(req);
